@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "241274908032",
+    "project_id": "com-example-lenta-644fd",
+    "storage_bucket": "com-example-lenta-644fd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:241274908032:android:cc540e763b801f9968e565",
+        "android_client_info": {
+          "package_name": "com.example.lenta"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAHLktL5vhU_Lg9UkgRpxQuXB3g4Jo9z1c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
