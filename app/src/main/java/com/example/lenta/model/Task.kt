@@ -10,6 +10,7 @@ data class Task(
     val title: String,
     val description: String = "",
     val location: String? = null,
+    val url: String? = null,
     val startTime: Long? = null,
     val endTime: Long? = null,
     val importance: Importance = Importance.MEDIUM,

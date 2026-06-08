@@ -17,84 +17,159 @@ import com.example.lenta.ui.easymode.EasyModeScreen
 import com.example.lenta.ui.theme.LentaTheme
 import com.example.lenta.ui.timeline.TimelineScreen
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.isSystemInDarkTheme
+import com.example.lenta.ui.settings.SettingsScreen
 import com.example.lenta.ui.timeline.ViewMode
+import com.example.lenta.ui.timeline.TimelineDays
 import com.example.lenta.ui.calendar.CalendarViewMode
+import com.example.lenta.ui.task.TaskDetailScreen
+import com.example.lenta.model.Task
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            LentaTheme {
+            val systemDark = isSystemInDarkTheme()
+            var isDarkTheme by remember { mutableStateOf(systemDark) }
+
+            LentaTheme(darkTheme = isDarkTheme) {
                 val viewModel: MainViewModel = viewModel()
                 val tasks by viewModel.allTasks.collectAsState()
+                val timelineScale by viewModel.timelineScale.collectAsState()
+                val timelineStackTasks by viewModel.timelineStackTasks.collectAsState()
+                val timelineDaysName by viewModel.timelineDays.collectAsState()
+                val timelineDays = try { TimelineDays.valueOf(timelineDaysName) } catch(e: Exception) { TimelineDays.DAY_1 }
+                
                 var selectedTab by remember { mutableStateOf(0) }
                 var timelineViewMode by remember { mutableStateOf(ViewMode.TIMELINE) }
                 var calendarViewMode by remember { mutableStateOf(CalendarViewMode.MONTHLY) }
+                var showSettings by remember { mutableStateOf(false) }
+                
+                var showTaskDetail by remember { mutableStateOf(false) }
+                var taskToEdit by remember { mutableStateOf<Task?>(null) }
+                var initialDateForTask by remember { mutableStateOf<LocalDate?>(null) }
 
-                Scaffold(
-                    bottomBar = {
-                        NavigationBar {
-                            NavigationBarItem(
-                                selected = selectedTab == 0,
-                                onClick = { 
-                                    if (selectedTab == 0) {
-                                        timelineViewMode = if (timelineViewMode == ViewMode.TIMELINE) ViewMode.LIST else ViewMode.TIMELINE
-                                    } else {
-                                        selectedTab = 0 
-                                    }
-                                },
-                                icon = { Text("〰️") }, // Streamline/Timeline icon
-                                label = { Text("Timeline") }
-                            )
-                            NavigationBarItem(
-                                selected = selectedTab == 1,
-                                onClick = { 
-                                    if (selectedTab == 1) {
-                                        calendarViewMode = if (calendarViewMode == CalendarViewMode.MONTHLY) CalendarViewMode.VERTICAL_LIST else CalendarViewMode.MONTHLY
-                                    } else {
-                                        selectedTab = 1 
-                                    }
-                                },
-                                icon = { Text("🗓️") },
-                                label = { Text("Calendar") }
-                            )
-                            NavigationBarItem(
-                                selected = selectedTab == 2,
-                                onClick = { selectedTab = 2 },
-                                icon = { Text("💬") },
-                                label = { Text("Easy") }
-                            )
+                if (showSettings) {
+                    SettingsScreen(
+                        isDarkTheme = isDarkTheme,
+                        onThemeChange = { isDarkTheme = it },
+                        timelineScale = timelineScale,
+                        onTimelineScaleChange = { viewModel.setTimelineScale(it) },
+                        timelineStackTasks = timelineStackTasks,
+                        onTimelineStackTasksChange = { viewModel.setTimelineStackTasks(it) },
+                        onBack = { showSettings = false }
+                    )
+                } else if (showTaskDetail) {
+                    TaskDetailScreen(
+                        task = taskToEdit,
+                        initialDate = initialDateForTask,
+                        onDismiss = { 
+                            showTaskDetail = false
+                            taskToEdit = null
+                            initialDateForTask = null
+                        },
+                        onSave = { task ->
+                            if (task.id != 0L) {
+                                viewModel.updateTask(task)
+                            } else {
+                                viewModel.addTask(task)
+                            }
+                            showTaskDetail = false
+                            taskToEdit = null
+                            initialDateForTask = null
+                        },
+                        onDelete = { task ->
+                            viewModel.deleteTask(task)
+                            showTaskDetail = false
+                            taskToEdit = null
+                            initialDateForTask = null
                         }
-                    }
-                ) { innerPadding ->
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
-                        color = MaterialTheme.colorScheme.background,
-                    ) {
-                        when (selectedTab) {
-                            0 -> TimelineScreen(
-                                tasks = tasks,
-                                onAddTask = { viewModel.addTask(it) },
-                                onDeleteTask = { viewModel.deleteTask(it) },
-                                viewMode = timelineViewMode,
-                                onViewModeChange = { timelineViewMode = it }
-                            )
-                            1 -> CalendarScreen(
-                                tasks = tasks.filter { !it.isEasyModeEntry },
-                                onAddTask = { viewModel.addTask(it) },
-                                onDeleteTask = { viewModel.deleteTask(it) },
-                                viewMode = calendarViewMode,
-                                onViewModeChange = { calendarViewMode = it }
-                            )
-                            2 -> EasyModeScreen(
-                                tasks = tasks,
-                                onAddTask = { viewModel.addTask(it) },
-                                onUpdateTask = { viewModel.updateTask(it) },
-                                onDeleteTask = { viewModel.deleteTask(it) },
-                                onDeleteCompleted = { viewModel.deleteCompletedEasyModeTasks() }
-                            )
+                    )
+                } else {
+                    Scaffold(
+                        bottomBar = {
+                            NavigationBar {
+                                NavigationBarItem(
+                                    selected = selectedTab == 0,
+                                    onClick = { 
+                                        if (selectedTab == 0) {
+                                            timelineViewMode = if (timelineViewMode == ViewMode.TIMELINE) ViewMode.LIST else ViewMode.TIMELINE
+                                        } else {
+                                            selectedTab = 0 
+                                        }
+                                    },
+                                    icon = { Text("📏") }, // Ruler icon for Timeline
+                                    label = { Text("Timeline") }
+                                )
+                                NavigationBarItem(
+                                    selected = selectedTab == 1,
+                                    onClick = { 
+                                        if (selectedTab == 1) {
+                                            calendarViewMode = if (calendarViewMode == CalendarViewMode.MONTHLY) CalendarViewMode.VERTICAL_LIST else CalendarViewMode.MONTHLY
+                                        } else {
+                                            selectedTab = 1 
+                                        }
+                                    },
+                                    icon = { Text("🗓️") },
+                                    label = { Text("Calendar") }
+                                )
+                                NavigationBarItem(
+                                    selected = selectedTab == 2,
+                                    onClick = { selectedTab = 2 },
+                                    icon = { Text("💬") },
+                                    label = { Text("Easy") }
+                                )
+                            }
+                        }
+                    ) { innerPadding ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding),
+                            color = MaterialTheme.colorScheme.background,
+                        ) {
+                            when (selectedTab) {
+                                0 -> TimelineScreen(
+                                    tasks = tasks,
+                                    onTaskClick = { 
+                                        taskToEdit = it
+                                        showTaskDetail = true
+                                    },
+                                    onAddTaskClick = {
+                                        taskToEdit = null
+                                        showTaskDetail = true
+                                    },
+                                    viewMode = timelineViewMode,
+                                    onViewModeChange = { timelineViewMode = it },
+                                    laneScale = timelineScale,
+                                    stickTimelines = timelineStackTasks,
+                                    initialTimelineDays = timelineDays,
+                                    onTimelineDaysChange = { viewModel.setTimelineDays(it.name) }
+                                )
+                                1 -> CalendarScreen(
+                                    tasks = tasks.filter { !it.isEasyModeEntry },
+                                    onTaskClick = {
+                                        taskToEdit = it
+                                        showTaskDetail = true
+                                    },
+                                    onAddTaskClick = { date ->
+                                        taskToEdit = null
+                                        initialDateForTask = date
+                                        showTaskDetail = true
+                                    },
+                                    viewMode = calendarViewMode,
+                                    onViewModeChange = { calendarViewMode = it },
+                                    onSettingsClick = { showSettings = true }
+                                )
+                                2 -> EasyModeScreen(
+                                    tasks = tasks,
+                                    onAddTask = { viewModel.addTask(it) },
+                                    onUpdateTask = { viewModel.updateTask(it) },
+                                    onDeleteTask = { viewModel.deleteTask(it) },
+                                    onDeleteCompleted = { viewModel.deleteCompletedEasyModeTasks() }
+                                )
+                            }
                         }
                     }
                 }

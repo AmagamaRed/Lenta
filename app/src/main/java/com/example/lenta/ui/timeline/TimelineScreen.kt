@@ -4,14 +4,17 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,11 +26,13 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
 import com.example.lenta.model.Task
-import androidx.compose.foundation.verticalScroll
-import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.Date
 
 enum class ViewMode { TIMELINE, LIST }
 enum class TimelineDays(val days: Int) { DAY_1(1), DAY_3(3), WEEK(7), WEEK_2(14) }
@@ -36,33 +41,40 @@ enum class TimelineDays(val days: Int) { DAY_1(1), DAY_3(3), WEEK(7), WEEK_2(14)
 @Composable
 fun TimelineScreen(
     tasks: List<Task>,
-    onAddTask: (Task) -> Unit,
-    onDeleteTask: (Task) -> Unit,
+    onTaskClick: (Task) -> Unit,
+    onAddTaskClick: () -> Unit,
     viewMode: ViewMode = ViewMode.TIMELINE,
     onViewModeChange: (ViewMode) -> Unit = {},
+    laneScale: Float = 1f,
+    stickTimelines: Boolean = false,
+    initialTimelineDays: TimelineDays = TimelineDays.DAY_1,
+    onTimelineDaysChange: (TimelineDays) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val timelineTasks = remember(tasks) { tasks.filter { !it.isEasyModeEntry } }
     
     var scale by remember { mutableStateOf(1f) }
-    var timelineDays by remember { mutableStateOf(TimelineDays.DAY_1) }
-    
-    val hourWidth = 100.dp * scale
-    val scrollState = rememberScrollState()
-    val verticalScrollState = rememberScrollState()
-    val coroutineScope = rememberCoroutineScope()
-    var showAddDialog by remember { mutableStateOf(false) }
-    var taskToDelete by remember { mutableStateOf<Task?>(null) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    var timelineDays by remember { mutableStateOf(initialTimelineDays) }
     var showDaysMenu by remember { mutableStateOf(false) }
 
-    val zoomState = rememberTransformableState { zoomChange, _, _ ->
-        scale = (scale * zoomChange).coerceIn(0.5f, 10f)
+    // Sync internal state with external when external changes
+    LaunchedEffect(initialTimelineDays) {
+        timelineDays = initialTimelineDays
     }
+    
+    val baseHourWidth = 100.dp
+    val laneHeight = 80.dp * laneScale
 
     val taskPositions = remember(timelineTasks) { calculateTaskPositions(timelineTasks) }
-    val laneHeight = 80.dp
     val maxLane = taskPositions.maxOfOrNull { it.lane } ?: 0
-    val totalContentHeight = 100.dp + (laneHeight * (maxLane + 1)) // Extra padding for the bottom
+    val singleDayHeight = 100.dp + (laneHeight * (maxLane + 1))
+    val totalContentHeight = if (stickTimelines) {
+        singleDayHeight * timelineDays.days
+    } else {
+        (singleDayHeight + 20.dp) * timelineDays.days
+    }
+    val totalWidth = baseHourWidth * 24
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -103,6 +115,7 @@ fun TimelineScreen(
                                         text = { Text(daysOption.name.replace("_", " ").replace("DAY ", "")) },
                                         onClick = {
                                             timelineDays = daysOption
+                                            onTimelineDaysChange(daysOption)
                                             showDaysMenu = false
                                         }
                                     )
@@ -112,7 +125,7 @@ fun TimelineScreen(
                     }
                 }
                 
-                Button(onClick = { showAddDialog = true }) {
+                Button(onClick = onAddTaskClick) {
                     Text("+")
                 }
             }
@@ -123,52 +136,92 @@ fun TimelineScreen(
                         .fillMaxWidth()
                         .weight(1f)
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                        .padding(vertical = 40.dp)
+                        .clipToBounds()
+                        .pointerInput(Unit) {
+                            detectTransformGestures { centroid, pan, zoom, _ ->
+                                val oldScale = scale
+                                scale = (scale * zoom).coerceIn(0.2f, 5f)
+
+                                val actualZoom = scale / oldScale
+                                offset = (offset * actualZoom) + pan - (centroid * (actualZoom - 1f))
+                            }
+                        }
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background)
-                            .horizontalScroll(scrollState)
-                            .verticalScroll(verticalScrollState)
-                            .transformable(state = zoomState, lockRotationOnZoomPan = true)
-                    ) {
-                        TimelineGrid(hourWidth, scale, timelineDays.days, totalContentHeight)
-                        TimelineTasks(timelineTasks, hourWidth, timelineDays.days, taskPositions, totalContentHeight) { task ->
-                            taskToDelete = task
-                        }
-                        CurrentTimeLine(hourWidth, totalContentHeight)
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(80.dp)
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = String.format(java.util.Locale.getDefault(), "Scale: %.1fx", scale),
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val maxScroll = scrollState.maxValue.toFloat()
-                        if (maxScroll > 0) {
-                            Slider(
-                                value = scrollState.value.toFloat(),
-                                onValueChange = { newValue ->
-                                    coroutineScope.launch {
-                                        scrollState.scrollTo(newValue.toInt())
-                                    }
-                                },
-                                valueRange = 0f..maxScroll
+                            .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
+                            .graphicsLayer(
+                                scaleX = scale,
+                                scaleY = scale,
+                                transformOrigin = TransformOrigin(0f, 0f)
                             )
+                            .width(totalWidth)
+                            .height(totalContentHeight)
+                    ) {
+                        val dateFormat = remember { SimpleDateFormat("dd.MM", Locale.getDefault()) }
+                        val startOfToday = remember {
+                            Calendar.getInstance().apply {
+                                set(Calendar.HOUR_OF_DAY, 0)
+                                set(Calendar.MINUTE, 0)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }.timeInMillis
+                        }
+
+                        for (dayIndex in 0 until timelineDays.days) {
+                            val dayStartMillis = startOfToday + (dayIndex * 24 * 60 * 60 * 1000L)
+                            val dayEndMillis = dayStartMillis + (24 * 60 * 60 * 1000L)
+                            val dayYOffset = if (stickTimelines) {
+                                singleDayHeight * dayIndex
+                            } else {
+                                (singleDayHeight + 20.dp) * dayIndex
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .offset(y = dayYOffset)
+                                    .requiredWidth(totalWidth) // Ensure it doesn't get squeezed
+                                    .height(singleDayHeight)
+                                    .clipToBounds()
+                            ) {
+                                TimelineGrid(baseHourWidth, scale, 1, singleDayHeight)
+
+                                // Date label: Centered in the middle of the day's timeline area
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = dateFormat.format(Date(dayStartMillis)),
+                                        style = MaterialTheme.typography.headlineLarge,
+                                        modifier = Modifier.graphicsLayer(alpha = 0.15f), // Watermark effect
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                val dayTasks = timelineTasks.filter {
+                                    val start = it.startTime ?: 0L
+                                    start >= dayStartMillis && start < dayEndMillis
+                                }
+                                // We use the same taskPositions but filter them, 
+                                // then we'll need to adjust their horizontal pos in TimelineTasks
+                                val dayTaskPositions = taskPositions.filter {
+                                    val start = it.task.startTime ?: 0L
+                                    start >= dayStartMillis && start < dayEndMillis
+                                }
+
+                                TimelineTasks(
+                                    tasks = dayTasks,
+                                    baseHourWidth = baseHourWidth,
+                                    dayStartMillis = dayStartMillis,
+                                    taskPositions = dayTaskPositions,
+                                    height = singleDayHeight,
+                                    laneHeight = laneHeight
+                                ) { task ->
+                                    onTaskClick(task)
+                                }
+
+                                if (dayIndex == 0) {
+                                    CurrentTimeLine(baseHourWidth, singleDayHeight)
+                                }
+                            }
                         }
                     }
                 }
@@ -179,203 +232,12 @@ fun TimelineScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(timelineTasks.sortedBy { it.startTime ?: 0L }) { task ->
-                        TaskListItem(task, onClick = { taskToDelete = task })
+                        TaskListItem(task, onClick = { onTaskClick(task) })
                     }
                 }
             }
         }
-
-        if (showAddDialog) {
-            QuickAddTaskDialog(
-                onDismiss = { showAddDialog = false },
-                onConfirm = { task ->
-                    onAddTask(task)
-                    showAddDialog = false
-                }
-            )
-        }
-
-        if (taskToDelete != null) {
-            DeleteTaskConfirmationDialog(
-                task = taskToDelete!!,
-                onDismiss = { taskToDelete = null },
-                onConfirm = {
-                    onDeleteTask(taskToDelete!!)
-                    taskToDelete = null
-                }
-            )
-        }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun QuickAddTaskDialog(
-    initialDate: java.time.LocalDate? = null,
-    onDismiss: () -> Unit,
-    onConfirm: (Task) -> Unit
-) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    
-    val baseCal = Calendar.getInstance().apply {
-        initialDate?.let {
-            set(Calendar.YEAR, it.year)
-            set(Calendar.MONTH, it.monthValue - 1)
-            set(Calendar.DAY_OF_MONTH, it.dayOfMonth)
-        }
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }
-    
-    var startTime by remember { mutableStateOf(baseCal.timeInMillis) }
-    var endTime by remember { mutableStateOf((baseCal.clone() as Calendar).apply { add(Calendar.HOUR_OF_DAY, 1) }.timeInMillis) }
-    var selectedColor by remember { mutableIntStateOf(Color.Blue.toArgb()) }
-    
-    val colors = listOf(Color.Red, Color.Blue, Color.Green, Color.Yellow, Color.Cyan, Color.Magenta, Color.Gray)
-
-    var showStartTimePicker by remember { mutableStateOf(false) }
-    var showEndTimePicker by remember { mutableStateOf(false) }
-
-    val startState = rememberTimePickerState(
-        initialHour = Calendar.getInstance().apply { timeInMillis = startTime }.get(Calendar.HOUR_OF_DAY),
-        initialMinute = Calendar.getInstance().apply { timeInMillis = startTime }.get(Calendar.MINUTE),
-        is24Hour = true
-    )
-    val endState = rememberTimePickerState(
-        initialHour = Calendar.getInstance().apply { timeInMillis = endTime }.get(Calendar.HOUR_OF_DAY),
-        initialMinute = Calendar.getInstance().apply { timeInMillis = endTime }.get(Calendar.MINUTE),
-        is24Hour = true
-    )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Quick Add Task") },
-        text = {
-            Column {
-                TextField(value = title, onValueChange = { title = it }, label = { Text("Title") })
-                Spacer(modifier = Modifier.height(8.dp))
-                TextField(value = description, onValueChange = { description = it }, label = { Text("Description") })
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Start: ", style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { showStartTimePicker = true }) {
-                        val cal = Calendar.getInstance().apply { timeInMillis = startTime }
-                        Text(String.format(java.util.Locale.getDefault(), "%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)))
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("End: ", style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { showEndTimePicker = true }) {
-                        val cal = Calendar.getInstance().apply { timeInMillis = endTime }
-                        Text(String.format(java.util.Locale.getDefault(), "%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)))
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Color:", style = MaterialTheme.typography.bodyMedium)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(colors) { color ->
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(color, MaterialTheme.shapes.small)
-                                .clickable { selectedColor = color.toArgb() }
-                                .padding(4.dp)
-                        ) {
-                            if (selectedColor == color.toArgb()) {
-                                Box(modifier = Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.5f), MaterialTheme.shapes.extraSmall))
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                val startH = startState.hour.toFloat() + startState.minute / 60f
-                var endH = endState.hour.toFloat() + endState.minute / 60f
-                
-                if (endH < startH) {
-                    if (endH < 12) endH += 12
-                }
-                
-                val actualStart = minOf(startH, endH)
-                val actualEnd = maxOf(startH, endH)
-                
-                val finalStartCal = (baseCal.clone() as Calendar).apply {
-                    set(Calendar.HOUR_OF_DAY, actualStart.toInt())
-                    set(Calendar.MINUTE, ((actualStart % 1) * 60).toInt())
-                }
-                val finalEndCal = (baseCal.clone() as Calendar).apply {
-                    set(Calendar.HOUR_OF_DAY, actualEnd.toInt())
-                    set(Calendar.MINUTE, ((actualEnd % 1) * 60).toInt())
-                }
-
-                onConfirm(Task(
-                    title = title.ifBlank { "New Task" },
-                    description = description,
-                    startTime = finalStartCal.timeInMillis,
-                    endTime = finalEndCal.timeInMillis,
-                    color = selectedColor
-                ))
-            }) { Text("Add") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-
-    if (showStartTimePicker) {
-        TimePickerDialog(
-            onDismissRequest = { showStartTimePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    val cal = Calendar.getInstance().apply {
-                        timeInMillis = startTime
-                        set(Calendar.HOUR_OF_DAY, startState.hour)
-                        set(Calendar.MINUTE, startState.minute)
-                    }
-                    startTime = cal.timeInMillis
-                    showStartTimePicker = false
-                }) { Text("OK") }
-            }
-        ) {
-            TimePicker(state = startState)
-        }
-    }
-
-    if (showEndTimePicker) {
-        TimePickerDialog(
-            onDismissRequest = { showEndTimePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    val cal = Calendar.getInstance().apply {
-                        timeInMillis = endTime
-                        set(Calendar.HOUR_OF_DAY, endState.hour)
-                        set(Calendar.MINUTE, endState.minute)
-                    }
-                    endTime = cal.timeInMillis
-                    showEndTimePicker = false
-                }) { Text("OK") }
-            }
-        ) {
-            TimePicker(state = endState)
-        }
-    }
-}
-
-@Composable
-fun TimePickerDialog(
-    onDismissRequest: () -> Unit,
-    confirmButton: @Composable () -> Unit,
-    content: @Composable () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        confirmButton = confirmButton,
-        dismissButton = { TextButton(onClick = onDismissRequest) { Text("Cancel") } },
-        text = { content() }
-    )
 }
 
 @Composable
@@ -409,30 +271,27 @@ fun TaskListItem(task: Task, onClick: () -> Unit) {
 }
 
 @Composable
-fun DeleteTaskConfirmationDialog(task: Task, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Delete Task") },
-        text = { Text("Delete '${task.title}'?") },
-        confirmButton = { Button(onClick = onConfirm, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Delete") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
-@Composable
-fun TimelineGrid(hourWidth: androidx.compose.ui.unit.Dp, scale: Float, days: Int = 1, height: androidx.compose.ui.unit.Dp) {
+fun TimelineGrid(baseHourWidth: androidx.compose.ui.unit.Dp, scale: Float, days: Int = 1, height: androidx.compose.ui.unit.Dp) {
     val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val backgroundColor = MaterialTheme.colorScheme.background
     val totalHours = 24 * days
-    val totalWidth = hourWidth * totalHours
+    val totalWidth = baseHourWidth * totalHours
     Box(modifier = Modifier.height(height).width(totalWidth)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val hourWidthPx = hourWidth.toPx()
-            
+            // Отрисовка фона на весь холст с запасом под масштаб
+            val extendedWidth = totalWidth.toPx() * (1f / scale)
+            drawRect(
+                color = backgroundColor,
+                size = androidx.compose.ui.geometry.Size(extendedWidth, size.height)
+            )
+
+            val hourWidthPx = baseHourWidth.toPx()
+
             for (i in 0..totalHours) {
                 val x = i * hourWidthPx
                 // Hour lines
                 drawLine(color = gridColor, start = Offset(x, 0f), end = Offset(x, size.height), strokeWidth = 1.dp.toPx())
-                
+
                 // 30 minute lines (>1.8x)
                 if (scale >= 0.8f) { // Logic for drawing lines should stay consistent, label logic changes
                     val midX = x + hourWidthPx / 2
@@ -446,7 +305,7 @@ fun TimelineGrid(hourWidth: androidx.compose.ui.unit.Dp, scale: Float, days: Int
                         )
                     }
                 }
-                
+
                 // 15 minute lines (>1.5x)
                 if (scale >= 1.5f) {
                     val q1X = x + hourWidthPx / 4
@@ -470,23 +329,24 @@ fun TimelineGrid(hourWidth: androidx.compose.ui.unit.Dp, scale: Float, days: Int
                 }
             }
         }
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             for (i in 0 until totalHours) {
                 val hourOfDay = i % 24
-                Box(modifier = Modifier.width(hourWidth)) {
+                val xOffset = baseHourWidth * i
+                Box(modifier = Modifier.offset(x = xOffset).width(baseHourWidth)) {
                     Text(
-                        text = String.format(java.util.Locale.getDefault(), "%02d:00", hourOfDay), 
-                        fontSize = 12.sp, 
+                        text = String.format(java.util.Locale.getDefault(), "%02d:00", hourOfDay),
+                        fontSize = 12.sp,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                     )
                     if (scale >= 1.8f) {
                         Text(
-                            text = String.format(java.util.Locale.getDefault(), "%02d:30", hourOfDay), 
+                            text = String.format(java.util.Locale.getDefault(), "%02d:30", hourOfDay),
                             fontSize = 10.sp,
                             color = Color.Gray,
                             modifier = Modifier
                                 .padding(horizontal = 4.dp, vertical = 2.dp)
-                                .offset(x = hourWidth / 2)
+                                .offset(x = baseHourWidth / 2)
                         )
                     }
                 }
@@ -498,40 +358,34 @@ fun TimelineGrid(hourWidth: androidx.compose.ui.unit.Dp, scale: Float, days: Int
 @Composable
 fun TimelineTasks(
     tasks: List<Task>, 
-    hourWidth: androidx.compose.ui.unit.Dp, 
-    days: Int = 1, 
+    baseHourWidth: androidx.compose.ui.unit.Dp,
+    dayStartMillis: Long,
     taskPositions: List<TaskPosition>,
     height: androidx.compose.ui.unit.Dp,
+    laneHeight: androidx.compose.ui.unit.Dp = 80.dp,
     onTaskClick: (Task) -> Unit
 ) {
-    // Filter tasks within the range of days from today
-    val startOfToday = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-    val endOfRange = startOfToday + (days * 24 * 60 * 60 * 1000L)
+    val endOfRange = dayStartMillis + (24 * 60 * 60 * 1000L)
 
-    val laneHeight = 80.dp
-    
     Box(modifier = Modifier.height(height).wrapContentHeight(Alignment.Top)) {
         taskPositions.forEach { position ->
             val task = position.task
             val taskStart = task.startTime ?: 0L
-            if (taskStart >= startOfToday && taskStart < endOfRange) {
-                val hoursFromStartOfToday = (taskStart - startOfToday).toFloat() / (60 * 60 * 1000f)
+            if (taskStart >= dayStartMillis && taskStart < endOfRange) {
+                val hoursFromStartOfDay = (taskStart - dayStartMillis).toFloat() / (60 * 60 * 1000f)
                 val durationHours = ((task.endTime ?: taskStart) - taskStart).toFloat() / (60 * 60 * 1000f)
-                
-                val left = hourWidth * hoursFromStartOfToday
-                val width = hourWidth * durationHours
+
+                val left = baseHourWidth * hoursFromStartOfDay
+                val width = baseHourWidth * durationHours
                 val topOffset = 40.dp + (laneHeight * position.lane)
-                
+
                 Surface(
                     modifier = Modifier
                         .offset(x = left, y = topOffset)
-                        .width(maxOf(width, 10.dp)) // Minimum width for visibility
-                        .height(laneHeight - 4.dp)
+                        .width(maxOf(width, 10.dp))
+                        // Task height remains static (76dp) as requested, 
+                        // while laneHeight (spacing) changes with settings
+                        .height(76.dp)
                         .pointerInput(task) { detectTapGestures { onTaskClick(task) } },
                     color = Color(task.color ?: MaterialTheme.colorScheme.primary.toArgb()),
                     shape = MaterialTheme.shapes.small,
@@ -539,7 +393,26 @@ fun TimelineTasks(
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
                         Text(text = task.title, style = MaterialTheme.typography.titleSmall, color = Color.White, maxLines = 1)
-                        if (width > 80.dp) {
+
+                        if (!task.location.isNullOrBlank()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.LocationOn,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = task.location,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        if (width > 80.dp && task.description.isNotBlank()) {
                             Text(text = task.description, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f), maxLines = 2)
                         }
                     }
@@ -555,9 +428,9 @@ private fun getHourFromMillis(millis: Long): Float {
 }
 
 @Composable
-fun CurrentTimeLine(hourWidth: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
+fun CurrentTimeLine(baseHourWidth: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) {
     val calendar = Calendar.getInstance()
     val hour = calendar.get(Calendar.HOUR_OF_DAY) + calendar.get(Calendar.MINUTE) / 60f
-    val x = hourWidth * hour
+    val x = baseHourWidth * hour
     Box(modifier = Modifier.offset(x = x).height(height).width(2.dp).background(Color.Red))
 }
