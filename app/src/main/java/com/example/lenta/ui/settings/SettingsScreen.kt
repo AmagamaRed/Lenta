@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LinearScale
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,6 +26,12 @@ fun SettingsScreen(
     onTimelineScaleChange: (Float) -> Unit,
     timelineStackTasks: Boolean,
     onTimelineStackTasksChange: (Boolean) -> Unit,
+    lockVerticalScroll: Boolean,
+    onLockVerticalScrollChange: (Boolean) -> Unit,
+    timelineMinX: Float,
+    onTimelineMinXChange: (Float) -> Unit,
+    timelineMaxX: Float,
+    onTimelineMaxXChange: (Float) -> Unit,
     onBack: () -> Unit
 ) {
     Scaffold(
@@ -69,6 +76,35 @@ fun SettingsScreen(
                     checked = timelineStackTasks,
                     onCheckedChange = onTimelineStackTasksChange
                 )
+                SettingsToggleItem(
+                    title = "Lock Vertical Scroll",
+                    icon = Icons.Default.Lock,
+                    checked = lockVerticalScroll,
+                    onCheckedChange = onLockVerticalScrollChange
+                )
+                
+                // Manual boundaries inputs
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = timelineMaxX.toString(),
+                        onValueChange = { onTimelineMaxXChange(it.toFloatOrNull() ?: 0f) },
+                        label = { Text("Max X (Left)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = timelineMinX.toString(),
+                        onValueChange = { onTimelineMinXChange(it.toFloatOrNull() ?: 0f) },
+                        label = { Text("Min X (Right)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
             }
 
             item {

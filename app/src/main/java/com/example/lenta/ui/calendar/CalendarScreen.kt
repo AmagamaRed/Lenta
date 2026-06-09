@@ -209,11 +209,13 @@ fun CalendarScreen(
 
 @Composable
 fun TaskInCell(task: Task) {
-    val timeStr = remember(task.startTime) {
-        task.startTime?.let {
-            val cal = Calendar.getInstance().apply { timeInMillis = it }
-            String.format(Locale.getDefault(), "%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
-        } ?: ""
+    val timeStr = remember(task.startTime, task.isAllDay) {
+        if (task.isAllDay) "" else {
+            task.startTime?.let {
+                val cal = Calendar.getInstance().apply { timeInMillis = it }
+                String.format(Locale.getDefault(), "%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
+            } ?: ""
+        }
     }
     
     Row(
@@ -224,14 +226,16 @@ fun TaskInCell(task: Task) {
             .padding(horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = timeStr,
-            fontSize = 6.5.sp,
-            color = Color.White,
-            maxLines = 1,
-            modifier = Modifier.wrapContentWidth()
-        )
-        Spacer(modifier = Modifier.width(3.dp))
+        if (timeStr.isNotEmpty()) {
+            Text(
+                text = timeStr,
+                fontSize = 6.5.sp,
+                color = Color.White,
+                maxLines = 1,
+                modifier = Modifier.wrapContentWidth()
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+        }
         Text(
             text = task.title,
             fontSize = 7.sp,
@@ -390,8 +394,17 @@ fun TaskSummaryItem(task: Task, onClick: () -> Unit) {
                 modifier = Modifier.width(60.dp),
                 horizontalAlignment = Alignment.End
             ) {
-                Text(text = startTimeStr, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                Text(text = endTimeStr, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                if (task.isAllDay) {
+                    Text(
+                        text = "All day",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Text(text = startTimeStr, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    Text(text = endTimeStr, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                }
             }
             
             Spacer(modifier = Modifier.width(16.dp))

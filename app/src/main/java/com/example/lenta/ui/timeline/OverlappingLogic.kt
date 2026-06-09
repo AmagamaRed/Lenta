@@ -11,11 +11,18 @@ data class TaskPosition(
 fun calculateTaskPositions(tasks: List<Task>): List<TaskPosition> {
     if (tasks.isEmpty()) return emptyList()
 
-    // Filter tasks that have time and sort them by start time
-    val timedTasks = tasks.filter { it.startTime != null && it.endTime != null }
+    val allDayTasks = tasks.filter { it.isAllDay }.sortedBy { it.createdAt }
+    val timedTasks = tasks.filter { !it.isAllDay && it.startTime != null && it.endTime != null }
         .sortedBy { it.startTime }
 
     val positions = mutableListOf<TaskPosition>()
+    
+    // Add all day tasks first
+    allDayTasks.forEachIndexed { index, task ->
+        positions.add(TaskPosition(task, index, 1))
+    }
+
+    val allDayCount = allDayTasks.size
     val activeGroups = mutableListOf<MutableList<Task>>()
 
     // Group overlapping tasks
@@ -57,7 +64,7 @@ fun calculateTaskPositions(tasks: List<Task>): List<TaskPosition> {
         
         val totalLanesInGroup = lanes.size
         for ((task, lane) in groupPositions) {
-            positions.add(TaskPosition(task, lane, totalLanesInGroup))
+            positions.add(TaskPosition(task, lane + allDayCount, totalLanesInGroup))
         }
     }
 

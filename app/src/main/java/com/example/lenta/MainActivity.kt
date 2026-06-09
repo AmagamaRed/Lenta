@@ -25,6 +25,7 @@ import com.example.lenta.ui.calendar.CalendarViewMode
 import com.example.lenta.ui.task.TaskDetailScreen
 import com.example.lenta.model.Task
 import java.time.LocalDate
+import androidx.activity.compose.BackHandler
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,8 +39,11 @@ class MainActivity : ComponentActivity() {
                 val tasks by viewModel.allTasks.collectAsState()
                 val timelineScale by viewModel.timelineScale.collectAsState()
                 val timelineStackTasks by viewModel.timelineStackTasks.collectAsState()
+                val lockVerticalScroll by viewModel.lockVerticalScroll.collectAsState()
+                val timelineMinX by viewModel.timelineMinX.collectAsState()
+                val timelineMaxX by viewModel.timelineMaxX.collectAsState()
                 val timelineDaysName by viewModel.timelineDays.collectAsState()
-                val timelineDays = try { TimelineDays.valueOf(timelineDaysName) } catch(e: Exception) { TimelineDays.DAY_1 }
+                val timelineDays = try { TimelineDays.valueOf(timelineDaysName) } catch(e: Exception) { TimelineDays.DAY_3 }
                 
                 var selectedTab by remember { mutableStateOf(0) }
                 var timelineViewMode by remember { mutableStateOf(ViewMode.TIMELINE) }
@@ -51,6 +55,7 @@ class MainActivity : ComponentActivity() {
                 var initialDateForTask by remember { mutableStateOf<LocalDate?>(null) }
 
                 if (showSettings) {
+                    BackHandler { showSettings = false }
                     SettingsScreen(
                         isDarkTheme = isDarkTheme,
                         onThemeChange = { isDarkTheme = it },
@@ -58,9 +63,20 @@ class MainActivity : ComponentActivity() {
                         onTimelineScaleChange = { viewModel.setTimelineScale(it) },
                         timelineStackTasks = timelineStackTasks,
                         onTimelineStackTasksChange = { viewModel.setTimelineStackTasks(it) },
+                        lockVerticalScroll = lockVerticalScroll,
+                        onLockVerticalScrollChange = { viewModel.setLockVerticalScroll(it) },
+                        timelineMinX = timelineMinX,
+                        onTimelineMinXChange = { viewModel.setTimelineMinX(it) },
+                        timelineMaxX = timelineMaxX,
+                        onTimelineMaxXChange = { viewModel.setTimelineMaxX(it) },
                         onBack = { showSettings = false }
                     )
                 } else if (showTaskDetail) {
+                    BackHandler {
+                        showTaskDetail = false
+                        taskToEdit = null
+                        initialDateForTask = null
+                    }
                     TaskDetailScreen(
                         task = taskToEdit,
                         initialDate = initialDateForTask,
@@ -144,6 +160,9 @@ class MainActivity : ComponentActivity() {
                                     onViewModeChange = { timelineViewMode = it },
                                     laneScale = timelineScale,
                                     stickTimelines = timelineStackTasks,
+                                    lockVerticalScroll = lockVerticalScroll,
+                                    customMinX = timelineMinX,
+                                    customMaxX = timelineMaxX,
                                     initialTimelineDays = timelineDays,
                                     onTimelineDaysChange = { viewModel.setTimelineDays(it.name) }
                                 )

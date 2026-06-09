@@ -19,9 +19,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.BackHandler
 import com.example.lenta.model.Task
 import java.util.Calendar
 import java.time.LocalDate
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,30 +62,23 @@ fun TaskDetailScreen(
     var endTime by remember { 
         mutableStateOf(task?.endTime ?: (baseCal.clone() as Calendar).apply { add(Calendar.HOUR_OF_DAY, 1) }.timeInMillis) 
     }
+    var isAllDay by remember { mutableStateOf(task?.isAllDay ?: false) }
     var selectedColor by remember { mutableIntStateOf(task?.color ?: Color.Blue.toArgb()) }
     
     val colors = listOf(Color.Red, Color.Blue, Color.Green, Color.Yellow, Color.Cyan, Color.Magenta, Color.Gray)
 
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
     
     var showRepeatScreen by remember { mutableStateOf(false) }
     var showMultiDayScreen by remember { mutableStateOf(false) }
 
-    val startState = rememberTimePickerState(
-        initialHour = Calendar.getInstance().apply { timeInMillis = startTime }.get(Calendar.HOUR_OF_DAY),
-        initialMinute = Calendar.getInstance().apply { timeInMillis = startTime }.get(Calendar.MINUTE),
-        is24Hour = true
-    )
-    val endState = rememberTimePickerState(
-        initialHour = Calendar.getInstance().apply { timeInMillis = endTime }.get(Calendar.HOUR_OF_DAY),
-        initialMinute = Calendar.getInstance().apply { timeInMillis = endTime }.get(Calendar.MINUTE),
-        is24Hour = true
-    )
-
     if (showRepeatScreen) {
+        BackHandler { showRepeatScreen = false }
         FullScreenPlaceholder(title = "Repeat Settings", onBack = { showRepeatScreen = false })
     } else if (showMultiDayScreen) {
+        BackHandler { showMultiDayScreen = false }
         FullScreenPlaceholder(title = "Multiple Days Settings", onBack = { showMultiDayScreen = false })
     } else {
         Scaffold(
@@ -95,23 +92,14 @@ fun TaskDetailScreen(
                     },
                     actions = {
                         TextButton(onClick = {
-                            val startH = startState.hour.toFloat() + startState.minute / 60f
-                            var endH = endState.hour.toFloat() + endState.minute / 60f
-
-                            if (endH < startH) {
-                                if (endH < 12) endH += 12
-                            }
-
-                            val actualStart = minOf(startH, endH)
-                            val actualEnd = maxOf(startH, endH)
-
-                            val finalStartCal = (baseCal.clone() as Calendar).apply {
-                                set(Calendar.HOUR_OF_DAY, actualStart.toInt())
-                                set(Calendar.MINUTE, ((actualStart % 1) * 60).toInt())
-                            }
-                            val finalEndCal = (baseCal.clone() as Calendar).apply {
-                                set(Calendar.HOUR_OF_DAY, actualEnd.toInt())
-                                set(Calendar.MINUTE, ((actualEnd % 1) * 60).toInt())
+                            val finalStartTime = startTime
+                            val finalEndTime = if (isAllDay) {
+                                // If all day, make sure it covers the whole day or at least doesn't conflict
+                                finalStartTime
+                            } else if (endTime < startTime) {
+                                startTime + 3600000L
+                            } else {
+                                endTime
                             }
 
                             onSave(
@@ -120,16 +108,18 @@ fun TaskDetailScreen(
                                     description = description,
                                     location = location,
                                     url = url,
-                                    startTime = finalStartCal.timeInMillis,
-                                    endTime = finalEndCal.timeInMillis,
+                                    startTime = finalStartTime,
+                                    endTime = finalEndTime,
+                                    isAllDay = isAllDay,
                                     color = selectedColor
                                 ) ?: Task(
                                     title = title.ifBlank { "New Task" },
                                     description = description,
                                     location = location,
                                     url = url,
-                                    startTime = finalStartCal.timeInMillis,
-                                    endTime = finalEndCal.timeInMillis,
+                                    startTime = finalStartTime,
+                                    endTime = finalEndTime,
+                                    isAllDay = isAllDay,
                                     color = selectedColor
                                 ))
                             )
@@ -184,23 +174,51 @@ fun TaskDetailScreen(
                     
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Start: ", style = MaterialTheme.typography.bodyLarge)
-                        TextButton(onClick = { showStartTimePicker = true }) {
-                            val cal = Calendar.getInstance().apply { timeInMillis = startTime }
-                            Text(
-                                String.format(java.util.Locale.getDefault(), "%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)),
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AccessTime, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("All day event", style = MaterialTheme.typography.bodyLarge)
                         }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("End: ", style = MaterialTheme.typography.bodyLarge)
-                        TextButton(onClick = { showEndTimePicker = true }) {
-                            val cal = Calendar.getInstance().apply { timeInMillis = endTime }
-                            Text(
-                                String.format(java.util.Locale.getDefault(), "%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)),
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                        Switch(checked = isAllDay, onCheckedChange = { isAllDay = it })
+                    }
+
+                    if (!isAllDay) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Start: ", style = MaterialTheme.typography.bodyLarge)
+                            TextButton(onClick = { showStartTimePicker = true }) {
+                                val cal = Calendar.getInstance().apply { timeInMillis = startTime }
+                                Text(
+                                    String.format(java.util.Locale.getDefault(), "%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Text("End: ", style = MaterialTheme.typography.bodyLarge)
+                            TextButton(onClick = { showEndTimePicker = true }) {
+                                val cal = Calendar.getInstance().apply { timeInMillis = endTime }
+                                Text(
+                                    String.format(java.util.Locale.getDefault(), "%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Event, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Date: ", style = MaterialTheme.typography.bodyLarge)
+                        TextButton(onClick = { showDatePicker = true }) {
+                            val cal = Calendar.getInstance().apply { timeInMillis = startTime }
+                            val sdf = SimpleDateFormat("dd MMMM yyyy", Locale.getDefault())
+                            Text(sdf.format(cal.time), style = MaterialTheme.typography.bodyLarge)
                         }
                     }
 
@@ -266,14 +284,19 @@ fun TaskDetailScreen(
     }
 
     if (showStartTimePicker) {
+        val startPickerState = rememberTimePickerState(
+            initialHour = Calendar.getInstance().apply { timeInMillis = startTime }.get(Calendar.HOUR_OF_DAY),
+            initialMinute = Calendar.getInstance().apply { timeInMillis = startTime }.get(Calendar.MINUTE),
+            is24Hour = true
+        )
         TimePickerDialog(
             onDismissRequest = { showStartTimePicker = false },
             confirmButton = {
                 TextButton(onClick = {
                     val cal = Calendar.getInstance().apply {
                         timeInMillis = startTime
-                        set(Calendar.HOUR_OF_DAY, startState.hour)
-                        set(Calendar.MINUTE, startState.minute)
+                        set(Calendar.HOUR_OF_DAY, startPickerState.hour)
+                        set(Calendar.MINUTE, startPickerState.minute)
                     }
                     startTime = cal.timeInMillis
 
@@ -287,26 +310,65 @@ fun TaskDetailScreen(
                 }) { Text("OK") }
             }
         ) {
-            TimePicker(state = startState)
+            TimePicker(state = startPickerState)
         }
     }
 
     if (showEndTimePicker) {
+        val endPickerState = rememberTimePickerState(
+            initialHour = Calendar.getInstance().apply { timeInMillis = endTime }.get(Calendar.HOUR_OF_DAY),
+            initialMinute = Calendar.getInstance().apply { timeInMillis = endTime }.get(Calendar.MINUTE),
+            is24Hour = true
+        )
         TimePickerDialog(
             onDismissRequest = { showEndTimePicker = false },
             confirmButton = {
                 TextButton(onClick = {
                     val cal = Calendar.getInstance().apply {
                         timeInMillis = endTime
-                        set(Calendar.HOUR_OF_DAY, endState.hour)
-                        set(Calendar.MINUTE, endState.minute)
+                        set(Calendar.HOUR_OF_DAY, endPickerState.hour)
+                        set(Calendar.MINUTE, endPickerState.minute)
                     }
                     endTime = cal.timeInMillis
                     showEndTimePicker = false
                 }) { Text("OK") }
             }
         ) {
-            TimePicker(state = endState)
+            TimePicker(state = endPickerState)
+        }
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = startTime)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { selectedMillis ->
+                        val selectedCal = Calendar.getInstance().apply { timeInMillis = selectedMillis }
+                        
+                        startTime = Calendar.getInstance().apply {
+                            timeInMillis = startTime
+                            set(Calendar.YEAR, selectedCal.get(Calendar.YEAR))
+                            set(Calendar.MONTH, selectedCal.get(Calendar.MONTH))
+                            set(Calendar.DAY_OF_MONTH, selectedCal.get(Calendar.DAY_OF_MONTH))
+                        }.timeInMillis
+
+                        endTime = Calendar.getInstance().apply {
+                            timeInMillis = endTime
+                            set(Calendar.YEAR, selectedCal.get(Calendar.YEAR))
+                            set(Calendar.MONTH, selectedCal.get(Calendar.MONTH))
+                            set(Calendar.DAY_OF_MONTH, selectedCal.get(Calendar.DAY_OF_MONTH))
+                        }.timeInMillis
+                    }
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }

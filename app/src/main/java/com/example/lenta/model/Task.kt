@@ -20,6 +20,7 @@ data class Task(
     val isCompleted: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val isEasyModeEntry: Boolean = false,
+    val isAllDay: Boolean = false,
     val isNumbered: Boolean = false,
     val hasCheckbox: Boolean = false
 )

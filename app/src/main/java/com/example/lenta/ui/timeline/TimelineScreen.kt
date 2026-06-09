@@ -1,14 +1,25 @@
 package com.example.lenta.ui.timeline
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculateCentroidSize
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateRotation
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
+import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -17,13 +28,16 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
@@ -33,9 +47,18 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.Date
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 enum class ViewMode { TIMELINE, LIST }
 enum class TimelineDays(val days: Int) { DAY_1(1), DAY_3(3), WEEK(7), WEEK_2(14) }
+
+data class DayConfig(
+    val startMillis: Long,
+    val taskPositions: List<TaskPosition>,
+    val height: androidx.compose.ui.unit.Dp,
+    val yOffset: androidx.compose.ui.unit.Dp
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,16 +70,27 @@ fun TimelineScreen(
     onViewModeChange: (ViewMode) -> Unit = {},
     laneScale: Float = 1f,
     stickTimelines: Boolean = false,
-    initialTimelineDays: TimelineDays = TimelineDays.DAY_1,
+    lockVerticalScroll: Boolean = false,
+    customMinX: Float = -3000f,
+    customMaxX: Float = 3500f,
+    initialTimelineDays: TimelineDays = TimelineDays.DAY_3,
     onTimelineDaysChange: (TimelineDays) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val timelineTasks = remember(tasks) { tasks.filter { !it.isEasyModeEntry } }
     
-    var scale by remember { mutableStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-    var timelineDays by remember { mutableStateOf(initialTimelineDays) }
+    var scale by rememberSaveable { mutableStateOf(1f) }
+    var offsetX by rememberSaveable { mutableStateOf(0f) }
+    var offsetY by rememberSaveable { mutableStateOf(0f) }
+    var timelineDays by rememberSaveable { mutableStateOf(initialTimelineDays) }
     var showDaysMenu by remember { mutableStateOf(false) }
+    
+    val offsetXAnim = remember { Animatable(offsetX) }
+    val offsetYAnim = remember { Animatable(offsetY) }
+    
+    // Sync animatable with state changes from outside (if any) or manual updates
+    LaunchedEffect(offsetX) { if (!offsetXAnim.isRunning) offsetXAnim.snapTo(offsetX) }
+    LaunchedEffect(offsetY) { if (!offsetYAnim.isRunning) offsetYAnim.snapTo(offsetY) }
 
     // Sync internal state with external when external changes
     LaunchedEffect(initialTimelineDays) {
@@ -66,13 +100,44 @@ fun TimelineScreen(
     val baseHourWidth = 100.dp
     val laneHeight = 80.dp * laneScale
 
-    val taskPositions = remember(timelineTasks) { calculateTaskPositions(timelineTasks) }
-    val maxLane = taskPositions.maxOfOrNull { it.lane } ?: 0
-    val singleDayHeight = 100.dp + (laneHeight * (maxLane + 1))
-    val totalContentHeight = if (stickTimelines) {
-        singleDayHeight * timelineDays.days
-    } else {
-        (singleDayHeight + 20.dp) * timelineDays.days
+    val startOfToday = remember {
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    // Calculate per-day heights and positions
+    val dayConfigs = remember<List<DayConfig>>(timelineTasks, timelineDays, laneHeight, stickTimelines) {
+        var currentY = 0.dp
+        List(timelineDays.days) { dayIndex ->
+            val dayStart = startOfToday + (dayIndex * 24 * 60 * 60 * 1000L)
+            val dayEnd = dayStart + (24 * 60 * 60 * 1000L)
+            val dayTasks = timelineTasks.filter { (it.startTime ?: 0L) >= dayStart && (it.startTime ?: 0L) < dayEnd }
+            
+            val positions = calculateTaskPositions(dayTasks)
+            val dayMaxLane = positions.maxOfOrNull { it.lane } ?: 0
+            val allDayCount = positions.count { it.task.isAllDay }
+            val timedLanesCount = if (positions.isEmpty()) 1 else maxOf(0, dayMaxLane - allDayCount + 1)
+            val dayHeight = 40.dp + (36.dp * allDayCount) + (laneHeight * timedLanesCount) + 60.dp
+            
+            val config = DayConfig(
+                startMillis = dayStart,
+                taskPositions = positions,
+                height = dayHeight,
+                yOffset = currentY
+            )
+            
+            currentY += dayHeight + if (stickTimelines) 0.dp else 20.dp
+            config
+        }
+    }
+
+    val totalContentHeight = if (dayConfigs.isEmpty()) 0.dp else {
+        val last = dayConfigs.last()
+        last.yOffset + last.height
     }
     val totalWidth = baseHourWidth * 24
 
@@ -137,89 +202,172 @@ fun TimelineScreen(
                         .weight(1f)
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                         .clipToBounds()
-                        .pointerInput(Unit) {
-                            detectTransformGestures { centroid, pan, zoom, _ ->
-                                val oldScale = scale
-                                scale = (scale * zoom).coerceIn(0.2f, 5f)
+                        .pointerInput(lockVerticalScroll, customMinX, customMaxX) {
+                            val totalWidthPx = totalWidth.toPx()
+                            
+                            coroutineScope {
+                                awaitEachGesture {
+                                    val velocityTracker = VelocityTracker()
+                                    var isMultiTouch = false
+                                    awaitFirstDown()
+                                    
+                                    // Stop any ongoing fling
+                                    launch { offsetXAnim.stop() }
+                                    launch { offsetYAnim.stop() }
+                                    
+                                    var zoom = 1f
+                                    var pan = Offset.Zero
+                                    var pastTouchSlop = false
+                                    val touchSlop = viewConfiguration.touchSlop
 
-                                val actualZoom = scale / oldScale
-                                offset = (offset * actualZoom) + pan - (centroid * (actualZoom - 1f))
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        if (event.changes.size > 1) isMultiTouch = true
+                                        
+                                        val canceled = event.changes.any { it.isConsumed }
+                                        if (!canceled) {
+                                            val zoomChange = event.calculateZoom()
+                                            val panChange = event.calculatePan()
+
+                                            if (!pastTouchSlop) {
+                                                zoom *= zoomChange
+                                                pan += panChange
+                                                val centroidSize = event.calculateCentroidSize(useCurrent = false)
+                                                val zoomMotion = abs(1 - zoom) * centroidSize
+                                                val panMotion = pan.getDistance()
+
+                                                if (zoomMotion > touchSlop || panMotion > touchSlop) {
+                                                    pastTouchSlop = true
+                                                }
+                                            }
+
+                                            if (pastTouchSlop) {
+                                                val centroid = event.calculateCentroid(useCurrent = false)
+                                                
+                                                if (zoomChange != 1f) {
+                                                    val oldScale = scale
+                                                    scale = (scale * zoomChange).coerceIn(0.2f, 5f)
+                                                    
+                                                    // Центрирование зума на пальцах (в координатах контента)
+                                                    val dx = centroid.x * (1f / scale - 1f / oldScale)
+                                                    val dy = centroid.y * (1f / scale - 1f / oldScale)
+
+                                                    val nextX = offsetX + dx
+                                                    offsetX = if (lockVerticalScroll) nextX.coerceIn(customMinX, customMaxX) else nextX
+                                                    offsetY += dy
+                                                }
+                                                if (panChange != Offset.Zero) {
+                                                    val newX = offsetX + (panChange.x / scale)
+                                                    
+                                                    offsetX = if (lockVerticalScroll) newX.coerceIn(customMinX, customMaxX) else newX
+                                                    if (!lockVerticalScroll) {
+                                                        offsetY += panChange.y / scale
+                                                    }
+                                                }
+                                                
+                                                // Track velocity
+                                                event.changes.forEach { 
+                                                    velocityTracker.addPosition(it.uptimeMillis, it.position)
+                                                    if (it.position != it.previousPosition) it.consume()
+                                                }
+                                            }
+                                        }
+                                    } while (!canceled && event.changes.any { it.pressed })
+
+                                    // Fling handling - ONLY if vertical scroll is locked and it was a single touch gesture
+                                    if (lockVerticalScroll && !isMultiTouch) {
+                                        val velocity = velocityTracker.calculateVelocity()
+                                        val absVelX = abs(velocity.x)
+                                        
+                                        if (absVelX > 200f) {
+                                            val boostFactor = when {
+                                                absVelX > 5000f -> 5.5f
+                                                absVelX > 2500f -> 4.0f
+                                                absVelX > 1000f -> 2.5f
+                                                else -> 1.5f
+                                            }
+                                            val finalVelocityX = (velocity.x * boostFactor) / scale
+                                            val decay = exponentialDecay<Float>(frictionMultiplier = 1.1f)
+                                            
+                                            launch {
+                                                offsetXAnim.snapTo(offsetX)
+                                                offsetXAnim.animateDecay(finalVelocityX, decay) {
+                                                    if (value < customMinX || value > customMaxX) {
+                                                        offsetX = value.coerceIn(customMinX, customMaxX)
+                                                        launch { offsetXAnim.stop() }
+                                                    } else {
+                                                        offsetX = value
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                 ) {
                     Box(
                         modifier = Modifier
-                            .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
                             .graphicsLayer(
                                 scaleX = scale,
                                 scaleY = scale,
+                                translationX = offsetX * scale,
+                                translationY = offsetY * scale,
                                 transformOrigin = TransformOrigin(0f, 0f)
                             )
                             .width(totalWidth)
                             .height(totalContentHeight)
                     ) {
                         val dateFormat = remember { SimpleDateFormat("dd.MM", Locale.getDefault()) }
-                        val startOfToday = remember {
-                            Calendar.getInstance().apply {
-                                set(Calendar.HOUR_OF_DAY, 0)
-                                set(Calendar.MINUTE, 0)
-                                set(Calendar.SECOND, 0)
-                                set(Calendar.MILLISECOND, 0)
-                            }.timeInMillis
-                        }
 
-                        for (dayIndex in 0 until timelineDays.days) {
-                            val dayStartMillis = startOfToday + (dayIndex * 24 * 60 * 60 * 1000L)
-                            val dayEndMillis = dayStartMillis + (24 * 60 * 60 * 1000L)
-                            val dayYOffset = if (stickTimelines) {
-                                singleDayHeight * dayIndex
-                            } else {
-                                (singleDayHeight + 20.dp) * dayIndex
-                            }
-
+                        dayConfigs.forEachIndexed { dayIndex, config ->
                             Box(
                                 modifier = Modifier
-                                    .offset(y = dayYOffset)
-                                    .requiredWidth(totalWidth) // Ensure it doesn't get squeezed
-                                    .height(singleDayHeight)
+                                    .offset(y = config.yOffset)
+                                    .requiredWidth(totalWidth)
+                                    .height(config.height)
                                     .clipToBounds()
                             ) {
-                                TimelineGrid(baseHourWidth, scale, 1, singleDayHeight)
+                                TimelineGrid(baseHourWidth, scale, 1, config.height)
 
-                                // Date label: Centered in the middle of the day's timeline area
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                // Date label at 02:00
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .padding(start = baseHourWidth * 2),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
                                     Text(
-                                        text = dateFormat.format(Date(dayStartMillis)),
+                                        text = dateFormat.format(Date(config.startMillis)),
                                         style = MaterialTheme.typography.headlineLarge,
-                                        modifier = Modifier.graphicsLayer(alpha = 0.15f), // Watermark effect
+                                        modifier = Modifier.graphicsLayer(alpha = 0.15f),
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
 
-                                val dayTasks = timelineTasks.filter {
-                                    val start = it.startTime ?: 0L
-                                    start >= dayStartMillis && start < dayEndMillis
-                                }
-                                // We use the same taskPositions but filter them, 
-                                // then we'll need to adjust their horizontal pos in TimelineTasks
-                                val dayTaskPositions = taskPositions.filter {
-                                    val start = it.task.startTime ?: 0L
-                                    start >= dayStartMillis && start < dayEndMillis
+                                // Date label at 12:00 (Center)
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = dateFormat.format(Date(config.startMillis)),
+                                        style = MaterialTheme.typography.headlineLarge,
+                                        modifier = Modifier.graphicsLayer(alpha = 0.15f),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
 
                                 TimelineTasks(
-                                    tasks = dayTasks,
+                                    tasks = emptyList(), // parameter not used in implementation
                                     baseHourWidth = baseHourWidth,
-                                    dayStartMillis = dayStartMillis,
-                                    taskPositions = dayTaskPositions,
-                                    height = singleDayHeight,
+                                    dayStartMillis = config.startMillis,
+                                    taskPositions = config.taskPositions,
+                                    height = config.height,
                                     laneHeight = laneHeight
                                 ) { task ->
                                     onTaskClick(task)
                                 }
 
                                 if (dayIndex == 0) {
-                                    CurrentTimeLine(baseHourWidth, singleDayHeight)
+                                    CurrentTimeLine(baseHourWidth, config.height)
                                 }
                             }
                         }
@@ -244,7 +392,9 @@ fun TimelineScreen(
 fun TaskListItem(task: Task, onClick: () -> Unit) {
     val startCal = Calendar.getInstance().apply { timeInMillis = task.startTime ?: 0 }
     val endCal = Calendar.getInstance().apply { timeInMillis = task.endTime ?: 0 }
-    val timeText = if (task.startTime != null) {
+    val timeText = if (task.isAllDay) {
+        "All day"
+    } else if (task.startTime != null) {
         String.format(java.util.Locale.getDefault(), "%02d:%02d - %02d:%02d", 
             startCal.get(Calendar.HOUR_OF_DAY), startCal.get(Calendar.MINUTE),
             endCal.get(Calendar.HOUR_OF_DAY), endCal.get(Calendar.MINUTE))
@@ -278,11 +428,9 @@ fun TimelineGrid(baseHourWidth: androidx.compose.ui.unit.Dp, scale: Float, days:
     val totalWidth = baseHourWidth * totalHours
     Box(modifier = Modifier.height(height).width(totalWidth)) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            // Отрисовка фона на весь холст с запасом под масштаб
-            val extendedWidth = totalWidth.toPx() * (1f / scale)
             drawRect(
                 color = backgroundColor,
-                size = androidx.compose.ui.geometry.Size(extendedWidth, size.height)
+                size = size
             )
 
             val hourWidthPx = baseHourWidth.toPx()
@@ -366,54 +514,93 @@ fun TimelineTasks(
     onTaskClick: (Task) -> Unit
 ) {
     val endOfRange = dayStartMillis + (24 * 60 * 60 * 1000L)
+    val allDayCount = taskPositions.count { it.task.isAllDay }
 
     Box(modifier = Modifier.height(height).wrapContentHeight(Alignment.Top)) {
         taskPositions.forEach { position ->
             val task = position.task
             val taskStart = task.startTime ?: 0L
-            if (taskStart >= dayStartMillis && taskStart < endOfRange) {
-                val hoursFromStartOfDay = (taskStart - dayStartMillis).toFloat() / (60 * 60 * 1000f)
-                val durationHours = ((task.endTime ?: taskStart) - taskStart).toFloat() / (60 * 60 * 1000f)
-
-                val left = baseHourWidth * hoursFromStartOfDay
-                val width = baseHourWidth * durationHours
-                val topOffset = 40.dp + (laneHeight * position.lane)
+            if (task.isAllDay || (taskStart >= dayStartMillis && taskStart < endOfRange)) {
+                val left = if (task.isAllDay) 0.dp else baseHourWidth * ((taskStart - dayStartMillis).toFloat() / (60 * 60 * 1000f))
+                val width = if (task.isAllDay) baseHourWidth * 24 else baseHourWidth * (((task.endTime ?: taskStart) - taskStart).toFloat() / (60 * 60 * 1000f))
+                
+                val topOffset = if (task.isAllDay) {
+                    40.dp + (36.dp * position.lane)
+                } else {
+                    40.dp + (36.dp * allDayCount) + (laneHeight * (position.lane - allDayCount))
+                }
 
                 Surface(
                     modifier = Modifier
                         .offset(x = left, y = topOffset)
                         .width(maxOf(width, 10.dp))
-                        // Task height remains static (76dp) as requested, 
-                        // while laneHeight (spacing) changes with settings
-                        .height(76.dp)
+                        .height(if (task.isAllDay) 32.dp else 76.dp)
                         .pointerInput(task) { detectTapGestures { onTaskClick(task) } },
                     color = Color(task.color ?: MaterialTheme.colorScheme.primary.toArgb()),
                     shape = MaterialTheme.shapes.small,
                     tonalElevation = 4.dp
                 ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
-                        Text(text = task.title, style = MaterialTheme.typography.titleSmall, color = Color.White, maxLines = 1)
-
-                        if (!task.location.isNullOrBlank()) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (task.isAllDay) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = task.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White,
+                                maxLines = 1
+                            )
+                            if (!task.location.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Icon(
                                     imageVector = Icons.Default.LocationOn,
                                     contentDescription = null,
                                     tint = Color.White.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(12.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                                 Spacer(modifier = Modifier.width(2.dp))
                                 Text(
                                     text = task.location,
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    maxLines = 1
+                                )
+                            }
+                            if (task.description.isNotBlank()) {
+                                Text(
+                                    text = ", ${task.description}",
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = Color.White.copy(alpha = 0.8f),
                                     maxLines = 1
                                 )
                             }
                         }
+                    } else {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text(text = task.title, style = MaterialTheme.typography.titleSmall, color = Color.White, maxLines = 1)
 
-                        if (width > 80.dp && task.description.isNotBlank()) {
-                            Text(text = task.description, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f), maxLines = 2)
+                            if (!task.location.isNullOrBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint = Color.White.copy(alpha = 0.8f),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text(
+                                        text = task.location,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+
+                            if (width > 80.dp && task.description.isNotBlank()) {
+                                Text(text = task.description, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f), maxLines = 2)
+                            }
                         }
                     }
                 }
