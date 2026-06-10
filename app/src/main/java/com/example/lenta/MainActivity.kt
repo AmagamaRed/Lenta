@@ -42,6 +42,14 @@ class MainActivity : ComponentActivity() {
                 val lockVerticalScroll by viewModel.lockVerticalScroll.collectAsState()
                 val timelineMinX by viewModel.timelineMinX.collectAsState()
                 val timelineMaxX by viewModel.timelineMaxX.collectAsState()
+                val calendarPreference by viewModel.calendarPreference.collectAsState()
+                val dayBarColor by viewModel.dayBarColor.collectAsState()
+                val dayBarOpacity by viewModel.dayBarOpacity.collectAsState()
+                val gridColor by viewModel.gridColor.collectAsState()
+                val gridOpacity by viewModel.gridOpacity.collectAsState()
+                val taskListColor by viewModel.taskListColor.collectAsState()
+                val taskListBrightness by viewModel.taskListBrightness.collectAsState()
+                val todayColor by viewModel.todayColor.collectAsState()
                 val timelineDaysName by viewModel.timelineDays.collectAsState()
                 val timelineDays = try { TimelineDays.valueOf(timelineDaysName) } catch(e: Exception) { TimelineDays.DAY_3 }
                 
@@ -49,13 +57,20 @@ class MainActivity : ComponentActivity() {
                 var timelineViewMode by remember { mutableStateOf(ViewMode.TIMELINE) }
                 var calendarViewMode by remember { mutableStateOf(CalendarViewMode.MONTHLY) }
                 var showSettings by remember { mutableStateOf(false) }
+                var activeSettingsSubScreen by remember { mutableStateOf<String?>(null) }
                 
                 var showTaskDetail by remember { mutableStateOf(false) }
                 var taskToEdit by remember { mutableStateOf<Task?>(null) }
                 var initialDateForTask by remember { mutableStateOf<LocalDate?>(null) }
 
                 if (showSettings) {
-                    BackHandler { showSettings = false }
+                    BackHandler {
+                        if (activeSettingsSubScreen != null) {
+                            activeSettingsSubScreen = null
+                        } else {
+                            showSettings = false
+                        }
+                    }
                     SettingsScreen(
                         isDarkTheme = isDarkTheme,
                         onThemeChange = { isDarkTheme = it },
@@ -69,7 +84,31 @@ class MainActivity : ComponentActivity() {
                         onTimelineMinXChange = { viewModel.setTimelineMinX(it) },
                         timelineMaxX = timelineMaxX,
                         onTimelineMaxXChange = { viewModel.setTimelineMaxX(it) },
-                        onBack = { showSettings = false }
+                        calendarPreference = calendarPreference,
+                        onCalendarPreferenceChange = { viewModel.setCalendarPreference(it) },
+                        dayBarColor = dayBarColor,
+                        onDayBarColorChange = { viewModel.setDayBarColor(it) },
+                        dayBarOpacity = dayBarOpacity,
+                        onDayBarOpacityChange = { viewModel.setDayBarOpacity(it) },
+                        gridColor = gridColor,
+                        onGridColorChange = { viewModel.setGridColor(it) },
+                        gridOpacity = gridOpacity,
+                        onGridOpacityChange = { viewModel.setGridOpacity(it) },
+                        taskListColor = taskListColor,
+                        onTaskListColorChange = { viewModel.setTaskListColor(it) },
+                        taskListBrightness = taskListBrightness,
+                        onTaskListBrightnessChange = { viewModel.setTaskListBrightness(it) },
+                        todayColor = todayColor,
+                        onTodayColorChange = { viewModel.setTodayColor(it) },
+                        activeSubScreen = activeSettingsSubScreen,
+                        onSubScreenChange = { activeSettingsSubScreen = it },
+                        onBack = { 
+                            if (activeSettingsSubScreen != null) {
+                                activeSettingsSubScreen = null
+                            } else {
+                                showSettings = false
+                            }
+                        }
                     )
                 } else if (showTaskDetail) {
                     BackHandler {
@@ -122,8 +161,15 @@ class MainActivity : ComponentActivity() {
                                     selected = selectedTab == 1,
                                     onClick = { 
                                         if (selectedTab == 1) {
-                                            calendarViewMode = if (calendarViewMode == CalendarViewMode.MONTHLY) CalendarViewMode.VERTICAL_LIST else CalendarViewMode.MONTHLY
+                                            if (calendarPreference == 0) {
+                                                calendarViewMode = if (calendarViewMode == CalendarViewMode.MONTHLY) CalendarViewMode.VERTICAL_LIST else CalendarViewMode.MONTHLY
+                                            }
                                         } else {
+                                            if (calendarPreference == 1) {
+                                                calendarViewMode = CalendarViewMode.VERTICAL_LIST
+                                            } else if (calendarPreference == 2) {
+                                                calendarViewMode = CalendarViewMode.MONTHLY
+                                            }
                                             selectedTab = 1 
                                         }
                                     },
@@ -179,7 +225,14 @@ class MainActivity : ComponentActivity() {
                                     },
                                     viewMode = calendarViewMode,
                                     onViewModeChange = { calendarViewMode = it },
-                                    onSettingsClick = { showSettings = true }
+                                    onSettingsClick = { showSettings = true },
+                                    dayBarColor = dayBarColor,
+                                    dayBarOpacity = dayBarOpacity,
+                                    gridColor = gridColor,
+                                    gridOpacity = gridOpacity,
+                                    taskListColor = taskListColor,
+                                    taskListBrightness = taskListBrightness,
+                                    todayColor = todayColor
                                 )
                                 2 -> EasyModeScreen(
                                     tasks = tasks,

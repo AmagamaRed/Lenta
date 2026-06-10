@@ -51,7 +51,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 enum class ViewMode { TIMELINE, LIST }
-enum class TimelineDays(val days: Int) { DAY_1(1), DAY_3(3), WEEK(7), WEEK_2(14) }
+enum class TimelineDays(val days: Int) { DAY_1(1), DAY_3(3), DAY_5(5), WEEK(7) }
 
 data class DayConfig(
     val startMillis: Long,
@@ -81,7 +81,8 @@ fun TimelineScreen(
     
     var scale by rememberSaveable { mutableStateOf(1f) }
     var offsetX by rememberSaveable { mutableStateOf(0f) }
-    var offsetY by rememberSaveable { mutableStateOf(0f) }
+    // Инициализируем смещением вниз, чтобы лента была выше центра, но не впритык
+    var offsetY by rememberSaveable { mutableStateOf(if (lockVerticalScroll) 80f else 0f) }
     var timelineDays by rememberSaveable { mutableStateOf(initialTimelineDays) }
     var showDaysMenu by remember { mutableStateOf(false) }
     
@@ -98,22 +99,29 @@ fun TimelineScreen(
     }
     
     val baseHourWidth = 100.dp
-    val laneHeight = 80.dp * laneScale
+    val laneHeight = (if (timelineDays == TimelineDays.DAY_1) 160.dp else 80.dp) * laneScale
 
-    val startOfToday = remember {
-        Calendar.getInstance().apply {
+    val timelineStart = remember(timelineDays, lockVerticalScroll) {
+        val cal = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
+        }
+        // Если это основная лента (без лока) и выбрана неделя - стартуем с Пн
+        if (timelineDays == TimelineDays.WEEK && !lockVerticalScroll) {
+            val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+            val daysToSubtract = (dayOfWeek + 5) % 7 // Пн(2)->0, Вт(3)->1 ... Вс(1)->6
+            cal.add(Calendar.DAY_OF_YEAR, -daysToSubtract)
+        }
+        cal.timeInMillis
     }
 
     // Calculate per-day heights and positions
-    val dayConfigs = remember<List<DayConfig>>(timelineTasks, timelineDays, laneHeight, stickTimelines) {
+    val dayConfigs = remember<List<DayConfig>>(timelineTasks, timelineDays, laneHeight, stickTimelines, timelineStart) {
         var currentY = 0.dp
         List(timelineDays.days) { dayIndex ->
-            val dayStart = startOfToday + (dayIndex * 24 * 60 * 60 * 1000L)
+            val dayStart = timelineStart + (dayIndex * 24 * 60 * 60 * 1000L)
             val dayEnd = dayStart + (24 * 60 * 60 * 1000L)
             val dayTasks = timelineTasks.filter { (it.startTime ?: 0L) >= dayStart && (it.startTime ?: 0L) < dayEnd }
             
@@ -170,8 +178,8 @@ fun TimelineScreen(
                                 Text(text = when(timelineDays) {
                                     TimelineDays.DAY_1 -> "1 Day"
                                     TimelineDays.DAY_3 -> "3 Days"
+                                    TimelineDays.DAY_5 -> "5 Days"
                                     TimelineDays.WEEK -> "1 Week"
-                                    TimelineDays.WEEK_2 -> "2 Weeks"
                                 }, style = MaterialTheme.typography.labelLarge)
                             }
                             DropdownMenu(expanded = showDaysMenu, onDismissRequest = { showDaysMenu = false }) {
@@ -328,13 +336,42 @@ fun TimelineScreen(
                                     .height(config.height)
                                     .clipToBounds()
                             ) {
+                                // Day of week label
+                                val cal = remember(config.startMillis) { 
+                                    Calendar.getInstance().apply { timeInMillis = config.startMillis } 
+                                }
+                                val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK) // 1=Sun, 2=Mon...
+                                val dayNum = if (dayOfWeek == 1) 7 else dayOfWeek - 1
+                                val dayName = when(dayNum) {
+                                    1 -> "Пн"
+                                    2 -> "Вт"
+                                    3 -> "Ср"
+                                    4 -> "Чт"
+                                    5 -> "Пт"
+                                    6 -> "Сб"
+                                    7 -> "Вс"
+                                    else -> ""
+                                }
+                                
                                 TimelineGrid(baseHourWidth, scale, 1, config.height)
 
-                                // Date label at 02:00
+                                // Day Label (e.g. 1. Пн)
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                                    Text(
+                                        text = "$dayNum. $dayName",
+                                        style = MaterialTheme.typography.headlineLarge,
+                                        color = if (dayNum == 7) Color.Red else MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier
+                                            .padding(start = 12.dp)
+                                            .graphicsLayer(alpha = 0.3f)
+                                    )
+                                }
+
+                                // Date label at 06:00 (shifted from 02:00)
                                 Box(
                                     modifier = Modifier
                                         .fillMaxHeight()
-                                        .padding(start = baseHourWidth * 2),
+                                        .padding(start = baseHourWidth * 6),
                                     contentAlignment = Alignment.CenterStart
                                 ) {
                                     Text(
@@ -345,8 +382,13 @@ fun TimelineScreen(
                                     )
                                 }
 
-                                // Date label at 12:00 (Center)
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                // Date label at 12:00 (reverted from 16:00)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .padding(start = baseHourWidth * 12),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
                                     Text(
                                         text = dateFormat.format(Date(config.startMillis)),
                                         style = MaterialTheme.typography.headlineLarge,
@@ -366,7 +408,14 @@ fun TimelineScreen(
                                     onTaskClick(task)
                                 }
 
-                                if (dayIndex == 0) {
+                                val isToday = remember(config.startMillis) {
+                                    val now = Calendar.getInstance()
+                                    val day = Calendar.getInstance().apply { timeInMillis = config.startMillis }
+                                    now.get(Calendar.YEAR) == day.get(Calendar.YEAR) &&
+                                    now.get(Calendar.DAY_OF_YEAR) == day.get(Calendar.DAY_OF_YEAR)
+                                }
+                                
+                                if (isToday) {
                                     CurrentTimeLine(baseHourWidth, config.height)
                                 }
                             }

@@ -57,6 +57,70 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putFloat("timeline_max_x", value).apply()
     }
 
+    private val _calendarPreference = MutableStateFlow(prefs.getInt("calendar_pref", 0)) // 0: Both, 1: V, 2: G
+    val calendarPreference = _calendarPreference.asStateFlow()
+
+    fun setCalendarPreference(pref: Int) {
+        _calendarPreference.value = pref
+        prefs.edit().putInt("calendar_pref", pref).apply()
+    }
+
+    private val _dayBarColor = MutableStateFlow(prefs.getInt("day_bar_color", -1)) // Default to -1 or some sensible color
+    val dayBarColor = _dayBarColor.asStateFlow()
+    fun setDayBarColor(color: Int) {
+        _dayBarColor.value = color
+        prefs.edit().putInt("day_bar_color", color).apply()
+    }
+
+    private val _dayBarOpacity = MutableStateFlow(prefs.getFloat("day_bar_opacity", 1.0f))
+    val dayBarOpacity = _dayBarOpacity.asStateFlow()
+    fun setDayBarOpacity(opacity: Float) {
+        _dayBarOpacity.value = opacity
+        prefs.edit().putFloat("day_bar_opacity", opacity).apply()
+    }
+
+    private val _gridColor = MutableStateFlow(prefs.getInt("grid_color", -3355444)) // Default gray
+    val gridColor = _gridColor.asStateFlow()
+    fun setGridColor(color: Int) {
+        _gridColor.value = color
+        prefs.edit().putInt("grid_color", color).apply()
+    }
+
+    private val _gridOpacity = MutableStateFlow(prefs.getFloat("grid_opacity", 0.5f))
+    val gridOpacity = _gridOpacity.asStateFlow()
+    fun setGridOpacity(opacity: Float) {
+        _gridOpacity.value = opacity
+        prefs.edit().putFloat("grid_opacity", opacity).apply()
+    }
+
+    private val _taskListColor = MutableStateFlow(prefs.getInt("task_list_color", -1)) // Default -1 (surface)
+    val taskListColor = _taskListColor.asStateFlow()
+    fun setTaskListColor(color: Int) {
+        _taskListColor.value = color
+        prefs.edit().putInt("task_list_color", color).apply()
+    }
+
+    private val _taskListOpacity = MutableStateFlow(prefs.getFloat("task_list_opacity", 1.0f))
+    val taskListOpacity = _taskListOpacity.asStateFlow()
+    fun setTaskListOpacity(opacity: Float) {
+        _taskListOpacity.value = opacity
+        prefs.edit().putFloat("task_list_opacity", opacity).apply()
+    }
+
+    private val _taskListBrightness = MutableStateFlow(prefs.getFloat("task_list_brightness", 1.0f))
+    val taskListBrightness = _taskListBrightness.asStateFlow()
+    fun setTaskListBrightness(value: Float) {
+        _taskListBrightness.value = value
+        prefs.edit().putFloat("task_list_brightness", value).apply()
+    }
+
+    private val _todayColor = MutableStateFlow(prefs.getInt("today_color", -16738680)) // Default Material blue
+    val todayColor = _todayColor.asStateFlow()
+    fun setTodayColor(color: Int) {
+        _todayColor.value = color
+        prefs.edit().putInt("today_color", color).apply()
+    }
+
     private val _timelineDays = MutableStateFlow(prefs.getString("timeline_days", "DAY_3") ?: "DAY_3")
     val timelineDays = _timelineDays.asStateFlow()
 
