@@ -653,6 +653,50 @@ fun TimelineTasks(
                         }
                     }
                 }
+                
+                // Travel time blocks
+                if (!task.isAllDay) {
+                    if (task.travelTimeBeforeMs > 0) {
+                        val beforeWidth = baseHourWidth * (task.travelTimeBeforeMs.toFloat() / 3600000f)
+                        val beforeLeft = left - beforeWidth
+                        val hours = task.travelTimeBeforeMs / 3600000
+                        val mins = (task.travelTimeBeforeMs % 3600000) / 60000
+                        val text = if (hours > 0) "${hours}ч ${mins}м" else "${mins} мин."
+
+                        Surface(
+                            modifier = Modifier
+                                .offset(x = beforeLeft, y = topOffset)
+                                .width(beforeWidth)
+                                .height(76.dp),
+                            color = Color(task.color ?: MaterialTheme.colorScheme.primary.toArgb()).copy(alpha = 0.25f),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(text, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 1)
+                            }
+                        }
+                    }
+                    if (task.travelTimeAfterMs > 0) {
+                        val afterWidth = baseHourWidth * (task.travelTimeAfterMs.toFloat() / 3600000f)
+                        val afterLeft = left + width
+                        val hours = task.travelTimeAfterMs / 3600000
+                        val mins = (task.travelTimeAfterMs % 3600000) / 60000
+                        val text = if (hours > 0) "${hours}ч ${mins}м" else "${mins} мин."
+
+                        Surface(
+                            modifier = Modifier
+                                .offset(x = afterLeft, y = topOffset)
+                                .width(afterWidth)
+                                .height(76.dp),
+                            color = Color(task.color ?: MaterialTheme.colorScheme.primary.toArgb()).copy(alpha = 0.25f),
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(text, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 1)
+                            }
+                        }
+                    }
+                }
             }
         }
     }

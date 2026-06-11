@@ -30,6 +30,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.drawText
 import com.example.lenta.model.Task
 import com.kizitonwose.calendar.compose.HorizontalCalendar
 import com.kizitonwose.calendar.compose.rememberCalendarState
@@ -42,13 +44,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.text.TextStyle
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle as JavaTextStyle
 import java.util.Calendar
 import java.util.Locale
 
@@ -57,6 +53,8 @@ enum class CalendarViewMode { MONTHLY, VERTICAL_LIST }
 @Composable
 fun CalendarScreen(
     tasks: List<Task>,
+    selectedDate: LocalDate?,
+    onDateSelected: (LocalDate?) -> Unit,
     onTaskClick: (Task) -> Unit,
     onAddTaskClick: (LocalDate) -> Unit,
     viewMode: CalendarViewMode = CalendarViewMode.MONTHLY,
@@ -76,7 +74,6 @@ fun CalendarScreen(
     val endMonth = remember { currentMonth.plusMonths(100) }
     val firstDayOfWeek = remember { firstDayOfWeekFromLocale() }
 
-    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     val state = rememberCalendarState(
@@ -158,7 +155,7 @@ fun CalendarScreen(
 
     if (selectedDate != null) {
         BackHandler {
-            selectedDate = null
+            onDateSelected(null)
         }
     }
 
@@ -214,7 +211,7 @@ fun CalendarScreen(
                                 gridState.animateScrollToItem(maxOf(0, index - 7))
                             }
                         }
-                        selectedDate = today
+                        onDateSelected(today)
                     }
                 }) {
                     Text("🎯") // Today icon
@@ -230,7 +227,7 @@ fun CalendarScreen(
                     (0..6).map { firstDay.plus(it.toLong()) }
                 }
                 
-                        Row(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(finalDayBarColor)
@@ -272,7 +269,7 @@ fun CalendarScreen(
                                         dayTasks = dayTasks,
                                         gridColor = finalGridColor,
                                         todayColor = finalTodayColor,
-                                        onClick = { clickedDay -> selectedDate = clickedDay.date }
+                                        onClick = { clickedDay -> onDateSelected(clickedDay.date) }
                                     )
                                 }
                             },
@@ -283,7 +280,7 @@ fun CalendarScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(MaterialTheme.colorScheme.surface) // Base background for the whole grid
-                                .clipToBounds() // Предотвращает выполнение отрисовки за пределами области календаря
+                                .clipToBounds()
                                 .drawBehind {
                                     val labelColor = primaryColor.copy(alpha = 0.18f)
                                     val visibleItems = gridState.layoutInfo.visibleItemsInfo
@@ -329,7 +326,7 @@ fun CalendarScreen(
                                             gridColor = finalGridColor,
                                             todayColor = finalTodayColor,
                                             monthIndicator = null, // Logic moved to parent drawBehind
-                                            onClick = { selectedDate = it }
+                                            onClick = { onDateSelected(it) }
                                         )
                                     }
                                 }
@@ -358,19 +355,19 @@ fun CalendarScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = selectedDate!!.format(DateTimeFormatter.ofPattern("MMMM d, yyyy")),
+                                text = selectedDate.format(DateTimeFormatter.ofPattern("MMMM d, yyyy")),
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Row {
                                 Button(
-                                    onClick = { onAddTaskClick(selectedDate!!) },
+                                    onClick = { onAddTaskClick(selectedDate) },
                                     contentPadding = PaddingValues(horizontal = 12.dp)
                                 ) {
                                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Text("Add Task", modifier = Modifier.padding(start = 4.dp), fontSize = 12.sp)
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
-                                IconButton(onClick = { selectedDate = null }) {
+                                IconButton(onClick = { onDateSelected(null) }) {
                                     Text("✕")
                                 }
                             }

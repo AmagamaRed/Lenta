@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.lenta.data.AppDatabase
+import com.example.lenta.model.Category
 import com.example.lenta.model.Task
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val taskDao = AppDatabase.getDatabase(application).taskDao()
+    private val categoryDao = AppDatabase.getDatabase(application).categoryDao()
     private val prefs = application.getSharedPreferences("lenta_settings", Context.MODE_PRIVATE)
 
     private val _timelineScale = MutableStateFlow(prefs.getFloat("timeline_scale", 1f))
@@ -129,6 +131,80 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putString("timeline_days", days).apply()
     }
 
+    private val _warnBeforeDelete = MutableStateFlow(prefs.getBoolean("warn_delete", false))
+    val warnBeforeDelete = _warnBeforeDelete.asStateFlow()
+
+    fun setWarnBeforeDelete(warn: Boolean) {
+        _warnBeforeDelete.value = warn
+        prefs.edit().putBoolean("warn_delete", warn).apply()
+    }
+
+    private val _easyModeChatLayout = MutableStateFlow(prefs.getBoolean("easy_mode_chat_layout", false))
+    val easyModeChatLayout = _easyModeChatLayout.asStateFlow()
+
+    fun setEasyModeChatLayout(enabled: Boolean) {
+        _easyModeChatLayout.value = enabled
+        prefs.edit().putBoolean("easy_mode_chat_layout", enabled).apply()
+    }
+
+    private val _activeChatId = MutableStateFlow(prefs.getLong("active_chat_id", -1L)) // -1 for "Main/Default"
+    val activeChatId = _activeChatId.asStateFlow()
+
+    fun setActiveChatId(id: Long) {
+        _activeChatId.value = id
+        prefs.edit().putLong("active_chat_id", id).apply()
+    }
+
+    val allCategories: StateFlow<List<Category>> = categoryDao.getAllCategories()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    private val _disableTravelTime = MutableStateFlow(prefs.getBoolean("disable_travel_time", false))
+    val disableTravelTime = _disableTravelTime.asStateFlow()
+
+    fun setDisableTravelTime(disable: Boolean) {
+        _disableTravelTime.value = disable
+        prefs.edit().putBoolean("disable_travel_time", disable).apply()
+    }
+
+    private val _hideLocation = MutableStateFlow(prefs.getBoolean("hide_location", false))
+    val hideLocation = _hideLocation.asStateFlow()
+    fun setHideLocation(hide: Boolean) {
+        _hideLocation.value = hide
+        prefs.edit().putBoolean("hide_location", hide).apply()
+    }
+
+    private val _hideUrl = MutableStateFlow(prefs.getBoolean("hide_url", false))
+    val hideUrl = _hideUrl.asStateFlow()
+    fun setHideUrl(hide: Boolean) {
+        _hideUrl.value = hide
+        prefs.edit().putBoolean("hide_url", hide).apply()
+    }
+
+    private val _hideDescription = MutableStateFlow(prefs.getBoolean("hide_description", false))
+    val hideDescription = _hideDescription.asStateFlow()
+    fun setHideDescription(hide: Boolean) {
+        _hideDescription.value = hide
+        prefs.edit().putBoolean("hide_description", hide).apply()
+    }
+
+    private val _hideMultiDay = MutableStateFlow(prefs.getBoolean("hide_multi_day", false))
+    val hideMultiDay = _hideMultiDay.asStateFlow()
+    fun setHideMultiDay(hide: Boolean) {
+        _hideMultiDay.value = hide
+        prefs.edit().putBoolean("hide_multi_day", hide).apply()
+    }
+
+    private val _hideRecurrence = MutableStateFlow(prefs.getBoolean("hide_recurrence", false))
+    val hideRecurrence = _hideRecurrence.asStateFlow()
+    fun setHideRecurrence(hide: Boolean) {
+        _hideRecurrence.value = hide
+        prefs.edit().putBoolean("hide_recurrence", hide).apply()
+    }
+
     val allTasks: StateFlow<List<Task>> = taskDao.getAllTasks()
         .stateIn(
             scope = viewModelScope,
@@ -142,14 +218,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addTask(title: String) {
+    fun addTask(title: String, hasCheckbox: Boolean = false) {
         addTask(
             Task(
                 title = title,
                 isEasyModeEntry = true,
-                hasCheckbox = true
+                hasCheckbox = hasCheckbox,
+                categoryId = if (activeChatId.value == -1L) null else activeChatId.value
             )
         )
+    }
+
+    fun addChat(name: String, color: Int) {
+        viewModelScope.launch {
+            categoryDao.insert(Category(name = name, color = color))
+        }
+    }
+
+    fun deleteChat(category: Category) {
+        viewModelScope.launch {
+            categoryDao.delete(category)
+            if (activeChatId.value == category.id) {
+                setActiveChatId(-1L)
+            }
+        }
     }
 
     fun updateTask(task: Task) {
@@ -168,6 +260,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteTask(task: Task) {
         viewModelScope.launch {
             taskDao.delete(task)
+        }
+    }
+
+    fun deleteTasksInRecurrence(task: Task, deleteAllFollowing: Boolean) {
+        viewModelScope.launch {
+            if (task.recurrenceId == null) {
+                taskDao.delete(task)
+            } else {
+                if (deleteAllFollowing) {
+                    val tasksToDelete = allTasks.value.filter { 
+                        it.recurrenceId == task.recurrenceId && (it.startTime ?: 0L) >= (task.startTime ?: 0L)
+                    }
+                    tasksToDelete.forEach { taskDao.delete(it) }
+                } else {
+                    taskDao.delete(task)
+                }
+            }
         }
     }
 }

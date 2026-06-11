@@ -3,8 +3,11 @@ package com.example.lenta
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowCompat
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,8 +53,19 @@ class MainActivity : ComponentActivity() {
                 val taskListColor by viewModel.taskListColor.collectAsState()
                 val taskListBrightness by viewModel.taskListBrightness.collectAsState()
                 val todayColor by viewModel.todayColor.collectAsState()
+                val warnBeforeDelete by viewModel.warnBeforeDelete.collectAsState()
+                val disableTravelTime by viewModel.disableTravelTime.collectAsState()
+                val hideLocation by viewModel.hideLocation.collectAsState()
+                val hideUrl by viewModel.hideUrl.collectAsState()
+                val hideDescription by viewModel.hideDescription.collectAsState()
+                val hideMultiDay by viewModel.hideMultiDay.collectAsState()
+                val hideRecurrence by viewModel.hideRecurrence.collectAsState()
                 val timelineDaysName by viewModel.timelineDays.collectAsState()
                 val timelineDays = try { TimelineDays.valueOf(timelineDaysName) } catch(e: Exception) { TimelineDays.DAY_3 }
+                
+                val categories by viewModel.allCategories.collectAsState()
+                val activeChatId by viewModel.activeChatId.collectAsState()
+                val easyModeChatLayout by viewModel.easyModeChatLayout.collectAsState()
                 
                 var selectedTab by remember { mutableStateOf(0) }
                 var timelineViewMode by remember { mutableStateOf(ViewMode.TIMELINE) }
@@ -62,6 +76,9 @@ class MainActivity : ComponentActivity() {
                 var showTaskDetail by remember { mutableStateOf(false) }
                 var taskToEdit by remember { mutableStateOf<Task?>(null) }
                 var initialDateForTask by remember { mutableStateOf<LocalDate?>(null) }
+                
+                // Move selectedDate to activity level to survive screen swaps
+                var calendarSelectedDate by remember { mutableStateOf<LocalDate?>(null) }
 
                 if (showSettings) {
                     BackHandler {
@@ -71,76 +88,109 @@ class MainActivity : ComponentActivity() {
                             showSettings = false
                         }
                     }
-                    SettingsScreen(
-                        isDarkTheme = isDarkTheme,
-                        onThemeChange = { isDarkTheme = it },
-                        timelineScale = timelineScale,
-                        onTimelineScaleChange = { viewModel.setTimelineScale(it) },
-                        timelineStackTasks = timelineStackTasks,
-                        onTimelineStackTasksChange = { viewModel.setTimelineStackTasks(it) },
-                        lockVerticalScroll = lockVerticalScroll,
-                        onLockVerticalScrollChange = { viewModel.setLockVerticalScroll(it) },
-                        timelineMinX = timelineMinX,
-                        onTimelineMinXChange = { viewModel.setTimelineMinX(it) },
-                        timelineMaxX = timelineMaxX,
-                        onTimelineMaxXChange = { viewModel.setTimelineMaxX(it) },
-                        calendarPreference = calendarPreference,
-                        onCalendarPreferenceChange = { viewModel.setCalendarPreference(it) },
-                        dayBarColor = dayBarColor,
-                        onDayBarColorChange = { viewModel.setDayBarColor(it) },
-                        dayBarOpacity = dayBarOpacity,
-                        onDayBarOpacityChange = { viewModel.setDayBarOpacity(it) },
-                        gridColor = gridColor,
-                        onGridColorChange = { viewModel.setGridColor(it) },
-                        gridOpacity = gridOpacity,
-                        onGridOpacityChange = { viewModel.setGridOpacity(it) },
-                        taskListColor = taskListColor,
-                        onTaskListColorChange = { viewModel.setTaskListColor(it) },
-                        taskListBrightness = taskListBrightness,
-                        onTaskListBrightnessChange = { viewModel.setTaskListBrightness(it) },
-                        todayColor = todayColor,
-                        onTodayColorChange = { viewModel.setTodayColor(it) },
-                        activeSubScreen = activeSettingsSubScreen,
-                        onSubScreenChange = { activeSettingsSubScreen = it },
-                        onBack = { 
-                            if (activeSettingsSubScreen != null) {
-                                activeSettingsSubScreen = null
-                            } else {
-                                showSettings = false
+                    Box {
+                        SettingsScreen(
+                            isDarkTheme = isDarkTheme,
+                            onThemeChange = { isDarkTheme = it },
+                            timelineScale = timelineScale,
+                            onTimelineScaleChange = { viewModel.setTimelineScale(it) },
+                            timelineStackTasks = timelineStackTasks,
+                            onTimelineStackTasksChange = { viewModel.setTimelineStackTasks(it) },
+                            lockVerticalScroll = lockVerticalScroll,
+                            onLockVerticalScrollChange = { viewModel.setLockVerticalScroll(it) },
+                            timelineMinX = timelineMinX,
+                            onTimelineMinXChange = { viewModel.setTimelineMinX(it) },
+                            timelineMaxX = timelineMaxX,
+                            onTimelineMaxXChange = { viewModel.setTimelineMaxX(it) },
+                            calendarPreference = calendarPreference,
+                            onCalendarPreferenceChange = { viewModel.setCalendarPreference(it) },
+                            dayBarColor = dayBarColor,
+                            onDayBarColorChange = { viewModel.setDayBarColor(it) },
+                            dayBarOpacity = dayBarOpacity,
+                            onDayBarOpacityChange = { viewModel.setDayBarOpacity(it) },
+                            gridColor = gridColor,
+                            onGridColorChange = { viewModel.setGridColor(it) },
+                            gridOpacity = gridOpacity,
+                            onGridOpacityChange = { viewModel.setGridOpacity(it) },
+                            taskListColor = taskListColor,
+                            onTaskListColorChange = { viewModel.setTaskListColor(it) },
+                            taskListBrightness = taskListBrightness,
+                            onTaskListBrightnessChange = { viewModel.setTaskListBrightness(it) },
+                            todayColor = todayColor,
+                            onTodayColorChange = { viewModel.setTodayColor(it) },
+                            warnBeforeDelete = warnBeforeDelete,
+                            onWarnBeforeDeleteChange = { viewModel.setWarnBeforeDelete(it) },
+                            easyModeChatLayout = easyModeChatLayout,
+                            onEasyModeChatLayoutChange = { viewModel.setEasyModeChatLayout(it) },
+                            disableTravelTime = disableTravelTime,
+                            onDisableTravelTimeChange = { viewModel.setDisableTravelTime(it) },
+                            hideLocation = hideLocation,
+                            onHideLocationChange = { viewModel.setHideLocation(it) },
+                            hideUrl = hideUrl,
+                            onHideUrlChange = { viewModel.setHideUrl(it) },
+                            hideDescription = hideDescription,
+                            onHideDescriptionChange = { viewModel.setHideDescription(it) },
+                            hideMultiDay = hideMultiDay,
+                            onHideMultiDayChange = { viewModel.setHideMultiDay(it) },
+                            hideRecurrence = hideRecurrence,
+                            onHideRecurrenceChange = { viewModel.setHideRecurrence(it) },
+                            activeSubScreen = activeSettingsSubScreen,
+                            onSubScreenChange = { activeSettingsSubScreen = it },
+                            onBack = {
+                                if (activeSettingsSubScreen != null) {
+                                    activeSettingsSubScreen = null
+                                } else {
+                                    showSettings = false
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 } else if (showTaskDetail) {
                     BackHandler {
                         showTaskDetail = false
                         taskToEdit = null
                         initialDateForTask = null
                     }
-                    TaskDetailScreen(
-                        task = taskToEdit,
-                        initialDate = initialDateForTask,
-                        onDismiss = { 
-                            showTaskDetail = false
-                            taskToEdit = null
-                            initialDateForTask = null
-                        },
-                        onSave = { task ->
-                            if (task.id != 0L) {
-                                viewModel.updateTask(task)
-                            } else {
-                                viewModel.addTask(task)
+                    Box {
+                        TaskDetailScreen(
+                            task = taskToEdit,
+                            initialDate = initialDateForTask,
+                            warnBeforeDelete = warnBeforeDelete,
+                            disableTravelTime = disableTravelTime,
+                            hideLocation = hideLocation,
+                            hideUrl = hideUrl,
+                            hideDescription = hideDescription,
+                            hideMultiDay = hideMultiDay,
+                            hideRecurrence = hideRecurrence,
+                            onDismiss = {
+                                showTaskDetail = false
+                                taskToEdit = null
+                                initialDateForTask = null
+                            },
+                            onSave = { task ->
+                                if (task.id != 0L) {
+                                    viewModel.updateTask(task)
+                                } else {
+                                    viewModel.addTask(task)
+                                }
+                                showTaskDetail = false
+                                taskToEdit = null
+                                initialDateForTask = null
+                            },
+                            onDelete = { task ->
+                                viewModel.deleteTask(task)
+                                showTaskDetail = false
+                                taskToEdit = null
+                                initialDateForTask = null
+                            },
+                            onDeleteRecurrence = { task, deleteAllFollowing ->
+                                viewModel.deleteTasksInRecurrence(task, deleteAllFollowing)
+                                showTaskDetail = false
+                                taskToEdit = null
+                                initialDateForTask = null
                             }
-                            showTaskDetail = false
-                            taskToEdit = null
-                            initialDateForTask = null
-                        },
-                        onDelete = { task ->
-                            viewModel.deleteTask(task)
-                            showTaskDetail = false
-                            taskToEdit = null
-                            initialDateForTask = null
-                        }
-                    )
+                        )
+                    }
                 } else {
                     Scaffold(
                         bottomBar = {
@@ -214,6 +264,8 @@ class MainActivity : ComponentActivity() {
                                 )
                                 1 -> CalendarScreen(
                                     tasks = tasks.filter { !it.isEasyModeEntry },
+                                    selectedDate = calendarSelectedDate,
+                                    onDateSelected = { calendarSelectedDate = it },
                                     onTaskClick = {
                                         taskToEdit = it
                                         showTaskDetail = true
@@ -236,7 +288,12 @@ class MainActivity : ComponentActivity() {
                                 )
                                 2 -> EasyModeScreen(
                                     tasks = tasks,
-                                    onAddTask = { viewModel.addTask(it) },
+                                    categories = categories,
+                                    activeChatId = activeChatId,
+                                    isChatMode = easyModeChatLayout,
+                                    onChatChange = { viewModel.setActiveChatId(it) },
+                                    onAddChat = { name, color -> viewModel.addChat(name, color) },
+                                    onAddTask = { title, hasCheckbox -> viewModel.addTask(title, hasCheckbox) },
                                     onUpdateTask = { viewModel.updateTask(it) },
                                     onDeleteTask = { viewModel.deleteTask(it) },
                                     onDeleteCompleted = { viewModel.deleteCompletedEasyModeTasks() }

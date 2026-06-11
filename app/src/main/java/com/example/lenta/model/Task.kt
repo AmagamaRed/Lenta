@@ -22,5 +22,8 @@ data class Task(
     val isEasyModeEntry: Boolean = false,
     val isAllDay: Boolean = false,
     val isNumbered: Boolean = false,
-    val hasCheckbox: Boolean = false
+    val hasCheckbox: Boolean = false,
+    val recurrenceId: String? = null,
+    val travelTimeBeforeMs: Long = 0,
+    val travelTimeAfterMs: Long = 0
 )
