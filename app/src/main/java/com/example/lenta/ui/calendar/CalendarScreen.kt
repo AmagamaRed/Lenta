@@ -146,7 +146,7 @@ fun CalendarScreen(
     val tasksOnSelectedDate = remember(tasks, selectedDate) {
         selectedDate?.let { date ->
             tasks.filter { task ->
-                task.startTime?.let {
+                !task.isVisibleOnlyOnTimeline && task.startTime?.let {
                     Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() == date
                 } ?: false
             }
@@ -259,7 +259,7 @@ fun CalendarScreen(
                             dayContent = { day ->
                                 if (day.position == DayPosition.MonthDate) {
                                     val dayTasks = tasks.filter { task ->
-                                        task.startTime?.let {
+                                        !task.isVisibleOnlyOnTimeline && task.startTime?.let {
                                             Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() == day.date
                                         } ?: false
                                     }
@@ -315,7 +315,7 @@ fun CalendarScreen(
                                         Box(modifier = Modifier.aspectRatio(0.5f).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)))
                                     } else {
                                         val dayTasks = tasks.filter { task ->
-                                            task.startTime?.let {
+                                            !task.isVisibleOnlyOnTimeline && task.startTime?.let {
                                                 Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() == date
                                             } ?: false
                                         }

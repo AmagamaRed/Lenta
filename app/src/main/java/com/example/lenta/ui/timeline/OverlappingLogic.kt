@@ -28,9 +28,14 @@ fun calculateTaskPositions(tasks: List<Task>): List<TaskPosition> {
     // Group overlapping tasks
     for (task in timedTasks) {
         var addedToGroup = false
+        val taskEffectiveStart = task.startTime!! - task.travelTimeBeforeMs
+        val taskEffectiveEnd = task.endTime!! + task.travelTimeAfterMs
+
         for (group in activeGroups) {
-            val lastTaskInGroup = group.maxByOrNull { it.endTime!! }!!
-            if (task.startTime!! < lastTaskInGroup.endTime!!) {
+            val lastTaskInGroup = group.maxByOrNull { it.endTime!! + it.travelTimeAfterMs }!!
+            val groupEffectiveEnd = lastTaskInGroup.endTime!! + lastTaskInGroup.travelTimeAfterMs
+            
+            if (taskEffectiveStart < groupEffectiveEnd) {
                 group.add(task)
                 addedToGroup = true
                 break
@@ -48,15 +53,18 @@ fun calculateTaskPositions(tasks: List<Task>): List<TaskPosition> {
         
         for (task in group) {
             var assignedLane = -1
+            val taskStart = task.startTime!! - task.travelTimeBeforeMs
+            val taskEnd = task.endTime!! + task.travelTimeAfterMs
+
             for (i in lanes.indices) {
-                if (task.startTime!! >= lanes[i]) {
-                    lanes[i] = task.endTime!!
+                if (taskStart >= lanes[i]) {
+                    lanes[i] = taskEnd
                     assignedLane = i
                     break
                 }
             }
             if (assignedLane == -1) {
-                lanes.add(task.endTime!!)
+                lanes.add(taskEnd)
                 assignedLane = lanes.size - 1
             }
             groupPositions.add(task to assignedLane)

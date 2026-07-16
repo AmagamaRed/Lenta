@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 import com.example.lenta.model.Category
 import com.example.lenta.model.Task
 
-@Database(entities = [Task::class, Category::class], version = 6, exportSchema = false)
+@Database(entities = [Task::class, Category::class], version = 7, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao

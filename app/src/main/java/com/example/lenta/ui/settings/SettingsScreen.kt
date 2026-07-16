@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinearScale
 import androidx.compose.material.icons.filled.LocationOn
@@ -85,6 +86,8 @@ fun SettingsScreen(
     onHideRecurrenceChange: (Boolean) -> Unit,
     easyModeChatLayout: Boolean,
     onEasyModeChatLayoutChange: (Boolean) -> Unit,
+    disableTimelineListToggle: Boolean,
+    onDisableTimelineListToggleChange: (Boolean) -> Unit,
     activeSubScreen: String?,
     onSubScreenChange: (String?) -> Unit,
     onBack: () -> Unit
@@ -156,6 +159,8 @@ fun SettingsScreen(
                 onScaleChange = onTimelineScaleChange,
                 stack = timelineStackTasks,
                 onStackChange = onTimelineStackTasksChange,
+                disableToggle = disableTimelineListToggle,
+                onDisableToggleChange = onDisableTimelineListToggleChange,
                 onBack = { onSubScreenChange(null) }
             )
             return
@@ -328,6 +333,8 @@ fun TimelineViewSettingsScreen(
     onScaleChange: (Float) -> Unit,
     stack: Boolean,
     onStackChange: (Boolean) -> Unit,
+    disableToggle: Boolean,
+    onDisableToggleChange: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     Scaffold(
@@ -364,6 +371,12 @@ fun TimelineViewSettingsScreen(
                         icon = Icons.Default.Palette,
                         checked = stack,
                         onCheckedChange = onStackChange
+                    )
+                    SettingsToggleItem(
+                        title = "Отключить переход в список",
+                        icon = Icons.Default.ListAlt,
+                        checked = disableToggle,
+                        onCheckedChange = onDisableToggleChange
                     )
                 }
             }

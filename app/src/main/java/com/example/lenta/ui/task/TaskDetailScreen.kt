@@ -84,9 +84,20 @@ fun TaskDetailScreen(
         mutableStateOf(task?.endTime ?: (baseCal.clone() as Calendar).apply { add(Calendar.HOUR_OF_DAY, 1) }.timeInMillis) 
     }
     var isAllDay by remember { mutableStateOf(task?.isAllDay ?: false) }
+    var isVisibleOnlyOnTimeline by remember { mutableStateOf(task?.isVisibleOnlyOnTimeline ?: false) }
     var selectedColor by remember { mutableIntStateOf(task?.color ?: Color.Blue.toArgb()) }
     
-    val colors = listOf(Color.Red, Color.Blue, Color.Green, Color.Yellow, Color.Cyan, Color.Magenta, Color.Gray)
+    val colors = listOf(
+        Color(0xFFFF1744), // Vibrant Red
+        Color(0xFF5C6BC0), // Solid Blue
+        Color(0xFF4CAF50), // Muted Green
+        Color(0xFFFFD600), // Saturated Yellow
+        Color(0xFFF57C00), // Darkish Pastel Orange
+        Color(0xFF00BCD4), // Cyan
+        Color(0xFF9C27B0), // Purple
+        Color(0xFFE91E63), // Pink
+        Color.Gray
+    )
 
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
@@ -152,7 +163,8 @@ fun TaskDetailScreen(
                                 color = selectedColor,
                                 recurrenceId = recurrenceId,
                                 travelTimeBeforeMs = beforeMs,
-                                travelTimeAfterMs = afterMs
+                                travelTimeAfterMs = afterMs,
+                                isVisibleOnlyOnTimeline = isVisibleOnlyOnTimeline
                             ) ?: Task(
                                 title = title.ifBlank { "New Task" },
                                 description = description,
@@ -164,7 +176,8 @@ fun TaskDetailScreen(
                                 color = selectedColor,
                                 recurrenceId = recurrenceId,
                                 travelTimeBeforeMs = beforeMs,
-                                travelTimeAfterMs = afterMs
+                                travelTimeAfterMs = afterMs,
+                                isVisibleOnlyOnTimeline = isVisibleOnlyOnTimeline
                             ))
                             
                             onSave(mainTask)
@@ -198,7 +211,8 @@ fun TaskDetailScreen(
                                     color = selectedColor,
                                     recurrenceId = recurrenceId,
                                     travelTimeBeforeMs = beforeMs,
-                                    travelTimeAfterMs = afterMs
+                                    travelTimeAfterMs = afterMs,
+                                    isVisibleOnlyOnTimeline = isVisibleOnlyOnTimeline
                                 ))
                             }
 
@@ -420,6 +434,21 @@ fun TaskDetailScreen(
                                 }
                             }
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.VisibilityOff, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Показывать только на ленте", style = MaterialTheme.typography.bodyLarge)
+                        }
+                        Switch(checked = isVisibleOnlyOnTimeline, onCheckedChange = { isVisibleOnlyOnTimeline = it })
                     }
                     
                     Spacer(modifier = Modifier.height(100.dp)) // Padding for delete button
@@ -1280,4 +1309,3 @@ private fun generateRecurrenceInstances(
     
     return instances
 }
-

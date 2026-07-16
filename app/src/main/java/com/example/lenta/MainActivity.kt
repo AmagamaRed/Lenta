@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
                 val hideDescription by viewModel.hideDescription.collectAsState()
                 val hideMultiDay by viewModel.hideMultiDay.collectAsState()
                 val hideRecurrence by viewModel.hideRecurrence.collectAsState()
+                val disableTimelineListToggle by viewModel.disableTimelineListToggle.collectAsState()
                 val timelineDaysName by viewModel.timelineDays.collectAsState()
                 val timelineDays = try { TimelineDays.valueOf(timelineDaysName) } catch(e: Exception) { TimelineDays.DAY_3 }
                 
@@ -134,6 +135,8 @@ class MainActivity : ComponentActivity() {
                             onHideMultiDayChange = { viewModel.setHideMultiDay(it) },
                             hideRecurrence = hideRecurrence,
                             onHideRecurrenceChange = { viewModel.setHideRecurrence(it) },
+                            disableTimelineListToggle = disableTimelineListToggle,
+                            onDisableTimelineListToggleChange = { viewModel.setDisableTimelineListToggle(it) },
                             activeSubScreen = activeSettingsSubScreen,
                             onSubScreenChange = { activeSettingsSubScreen = it },
                             onBack = {
@@ -199,7 +202,9 @@ class MainActivity : ComponentActivity() {
                                     selected = selectedTab == 0,
                                     onClick = { 
                                         if (selectedTab == 0) {
-                                            timelineViewMode = if (timelineViewMode == ViewMode.TIMELINE) ViewMode.LIST else ViewMode.TIMELINE
+                                            if (!disableTimelineListToggle) {
+                                                timelineViewMode = if (timelineViewMode == ViewMode.TIMELINE) ViewMode.LIST else ViewMode.TIMELINE
+                                            }
                                         } else {
                                             selectedTab = 0 
                                         }

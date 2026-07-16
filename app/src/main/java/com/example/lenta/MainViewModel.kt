@@ -205,6 +205,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putBoolean("hide_recurrence", hide).apply()
     }
 
+    private val _disableTimelineListToggle = MutableStateFlow(prefs.getBoolean("disable_timeline_toggle", false))
+    val disableTimelineListToggle = _disableTimelineListToggle.asStateFlow()
+    fun setDisableTimelineListToggle(disabled: Boolean) {
+        _disableTimelineListToggle.value = disabled
+        prefs.edit().putBoolean("disable_timeline_toggle", disabled).apply()
+    }
+
     val allTasks: StateFlow<List<Task>> = taskDao.getAllTasks()
         .stateIn(
             scope = viewModelScope,
