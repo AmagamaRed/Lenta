@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -352,7 +353,7 @@ fun TaskItem(task: Task, onToggle: () -> Unit, onClick: () -> Unit) {
             Box(modifier = Modifier.weight(1f)) {
                 Text(
                     text = task.title,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 20.sp, fontFamily = FontFamily.SansSerif),
                     textDecoration = if (task.isCompleted) TextDecoration.LineThrough else null,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
                 )

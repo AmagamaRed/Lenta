@@ -2,6 +2,8 @@ package com.example.lenta.ui.timeline
 
 
 
+import android.util.Log
+
 import androidx.compose.animation.core.Animatable
 
 import androidx.compose.animation.core.exponentialDecay
@@ -84,6 +86,7 @@ import androidx.compose.ui.unit.dp
 
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -136,7 +139,7 @@ fun TimelineScreen(
 
     onTaskClick: (Task) -> Unit,
 
-    onAddTaskClick: () -> Unit,
+    onAddTaskClick: (Long?) -> Unit,
 
     viewMode: ViewMode = ViewMode.TIMELINE,
 
@@ -144,13 +147,11 @@ fun TimelineScreen(
 
     laneScale: Float = 1f,
 
-    stickTimelines: Boolean = false,
-
     lockVerticalScroll: Boolean = false,
 
-    customMinX: Float = -3000f,
+    customMinX: Float = -15000f,
 
-    customMaxX: Float = 3500f,
+    customMaxX: Float = 15000f,
 
     initialTimelineDays: TimelineDays = TimelineDays.DAY_3,
 
@@ -167,8 +168,6 @@ fun TimelineScreen(
 
     var offsetX by rememberSaveable { mutableStateOf(0f) }
 
-// Инициализируем смещением вниз, чтобы лента была выше центра, но не впритык
-
     var offsetY by rememberSaveable { mutableStateOf(if (lockVerticalScroll) 80f else 0f) }
 
     var timelineDays by rememberSaveable { mutableStateOf(initialTimelineDays) }
@@ -181,15 +180,11 @@ fun TimelineScreen(
     val offsetYAnim = remember { Animatable(offsetY) }
 
 
-// Sync animatable with state changes from outside (if any) or manual updates
-
     LaunchedEffect(offsetX) { if (!offsetXAnim.isRunning) offsetXAnim.snapTo(offsetX) }
 
     LaunchedEffect(offsetY) { if (!offsetYAnim.isRunning) offsetYAnim.snapTo(offsetY) }
 
 
-
-// Sync internal state with external when external changes
 
     LaunchedEffect(initialTimelineDays) {
 
@@ -218,8 +213,6 @@ fun TimelineScreen(
 
         }
 
-// Если это основная лента (без лока) и выбрана неделя - стартуем с Пн
-
         if (timelineDays == TimelineDays.WEEK && !lockVerticalScroll) {
 
             val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
@@ -240,8 +233,6 @@ fun TimelineScreen(
 
 
 
-// Calculate lane positions for ALL tasks in the visible range to ensure consistency
-
     val tasksInRange = remember(timelineTasks, timelineStart, visibleRangeEnd) {
 
         timelineTasks.filter {
@@ -260,9 +251,7 @@ fun TimelineScreen(
 
 
 
-// Calculate per-day heights and positions
-
-    val dayConfigs = remember<List<DayConfig>>(globalTaskPositions, timelineDays, laneHeight, stickTimelines, timelineStart) {
+    val dayConfigs = remember<List<DayConfig>>(globalTaskPositions, timelineDays, laneHeight, timelineStart) {
 
         var currentY = 0.dp
 
@@ -272,8 +261,6 @@ fun TimelineScreen(
 
             val dayEnd = dayStart + (24 * 60 * 60 * 1000L)
 
-
-// Include tasks that overlap with this specific day (including travel time)
 
             val dayPositions = globalTaskPositions.filter { pos ->
 
@@ -312,7 +299,7 @@ fun TimelineScreen(
             )
 
 
-            currentY += dayHeight + if (stickTimelines) 0.dp else 20.dp
+            currentY += dayHeight + 20.dp
 
             config
 
@@ -342,8 +329,6 @@ fun TimelineScreen(
 
 
 
-// Автоматическое центрирование на текущем времени при первом запуске
-
         var isFirstLayout by remember { mutableStateOf(true) }
 
         LaunchedEffect(viewportWidthPx) {
@@ -357,23 +342,11 @@ fun TimelineScreen(
                 val hourWidthPx = with(density) { baseHourWidth.toPx() }
 
 
-// Целевая позиция X для маркера в экранных координатах
-
-                val targetMarkerX = viewportWidthPx / 2f
-
-
-// ВычисляемoffsetX так, чтобы маркер (currentHour * hourWidthPx * scale)
-
-// после применения трансформации (offsetX * scale) оказался в targetMarkerX
-
-// Формула отрисовки: ScreenX = (offsetX + ContentX) * scale
-
-// Отсюда: offsetX = (targetMarkerX / scale) - ContentX
-
-
                 val markerContentX = currentHour * hourWidthPx
 
-                offsetX = (targetMarkerX / scale) - markerContentX
+                val targetOffsetX = (viewportWidthPx / (2f * scale)) - markerContentX
+                
+                offsetX = targetOffsetX.coerceIn(customMinX, customMaxX)
 
 
                 offsetXAnim.snapTo(offsetX)
@@ -401,8 +374,6 @@ fun TimelineScreen(
                 verticalAlignment = Alignment.CenterVertically
 
             ) {
-
-// Simplified toggle button
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
 
@@ -480,7 +451,7 @@ fun TimelineScreen(
                 }
 
 
-                Button(onClick = onAddTaskClick) {
+                Button(onClick = { onAddTaskClick(null) }) {
 
                     Text("+")
 
@@ -504,13 +475,52 @@ fun TimelineScreen(
 
                         .clipToBounds()
 
+                        .pointerInput(dayConfigs, scale, offsetX, offsetY) {
+                            detectTapGestures(
+                                onLongPress = { offset ->
+                                    val currentScale = scale
+                                    val currentOffsetX = offsetX
+                                    val currentOffsetY = offsetY
+                                    
+                                    val contentX = (offset.x / currentScale) - currentOffsetX
+                                    val contentY = (offset.y / currentScale) - currentOffsetY
+                                    
+                                    val hourWidthPx = baseHourWidth.toPx()
+                                    
+                                    val targetConfig = dayConfigs.find { config ->
+                                        val yStart = config.yOffset.toPx()
+                                        val yEnd = yStart + config.height.toPx()
+                                        contentY >= yStart && contentY <= yEnd
+                                    }
+                                    
+                                    targetConfig?.let { config ->
+                                        val hourDecimal = contentX.toDouble() / hourWidthPx.toDouble()
+                                        
+                                        val cal = Calendar.getInstance().apply { 
+                                            timeInMillis = config.startMillis
+                                            
+                                            set(Calendar.HOUR_OF_DAY, 0)
+                                            set(Calendar.MINUTE, 0)
+                                            set(Calendar.SECOND, 0)
+                                            set(Calendar.MILLISECOND, 0)
+                                            
+                                            // 1. Считаем минуты от начала дня (включая сдвиг 10ч 50м = 650 минут)
+                                            val baseMinutes = (hourDecimal * 60.0).roundToInt()
+                                            val totalMinutesWithOffset = baseMinutes + 600
+                                            
+                                            // 2. Округляем до ближайших 30 минут (13:45 -> 14:00, 13:44 -> 13:30)
+                                            val roundedMinutes = ((totalMinutesWithOffset + 15) / 30) * 30
+                                            
+                                            // 3. Устанавливаем итоговое время
+                                            add(Calendar.MINUTE, roundedMinutes)
+                                        }
+                                        onAddTaskClick(cal.timeInMillis)
+                                    }
+                                }
+                            )
+                        }
                         .pointerInput(lockVerticalScroll, customMinX, customMaxX) {
-
-                            val totalWidthPx = totalWidth.toPx()
-
-
                             coroutineScope {
-
                                 awaitEachGesture {
 
                                     val velocityTracker = VelocityTracker()
@@ -519,8 +529,6 @@ fun TimelineScreen(
 
                                     awaitFirstDown()
 
-
-// Stop any ongoing fling
 
                                     launch { offsetXAnim.stop() }
 
@@ -590,8 +598,6 @@ fun TimelineScreen(
                                                     scale = (scale * zoomChange).coerceIn(0.2f, 5f)
 
 
-// Центрирование зума на пальцах (в координатах контента)
-
                                                     val dx = centroid.x * (1f / scale - 1f / oldScale)
 
                                                     val dy = centroid.y * (1f / scale - 1f / oldScale)
@@ -608,10 +614,10 @@ fun TimelineScreen(
 
                                                 if (panChange != Offset.Zero) {
 
-                                                    val newX = offsetX + (panChange.x / scale)
+                                                    val nextPanX = offsetX + (panChange.x / scale)
 
 
-                                                    offsetX = if (lockVerticalScroll) newX.coerceIn(customMinX, customMaxX) else newX
+                                                    offsetX = if (lockVerticalScroll) nextPanX.coerceIn(customMinX, customMaxX) else nextPanX
 
                                                     if (!lockVerticalScroll) {
 
@@ -621,8 +627,6 @@ fun TimelineScreen(
 
                                                 }
 
-
-// Track velocity
 
                                                 event.changes.forEach {
 
@@ -639,8 +643,6 @@ fun TimelineScreen(
                                     } while (!canceled && event.changes.any { it.pressed })
 
 
-
-// Fling handling - ONLY if vertical scroll is locked and it was a single touch gesture
 
                                     if (lockVerticalScroll && !isMultiTouch) {
 
@@ -746,7 +748,6 @@ fun TimelineScreen(
 
                             ) {
 
-// Day of week label
 
                                 val cal = remember(config.startMillis) {
 
@@ -783,8 +784,6 @@ fun TimelineScreen(
 
 
 
-// Day Label (e.g. 1. Пн)
-
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
 
                                     Text(
@@ -806,8 +805,6 @@ fun TimelineScreen(
                                 }
 
 
-
-// Date label at 06:00 (shifted from 02:00)
 
                                 Box(
 
@@ -836,8 +833,6 @@ fun TimelineScreen(
                                 }
 
 
-
-// Date label at 12:00 (reverted from 16:00)
 
                                 Box(
 
@@ -1046,15 +1041,11 @@ fun TimelineGrid(baseHourWidth: androidx.compose.ui.unit.Dp, scale: Float, days:
 
                 val x = i * hourWidthPx
 
-// Hour lines
-
                 drawLine(color = gridColor, start = Offset(x, 0f), end = Offset(x, size.height), strokeWidth = 1.dp.toPx())
 
 
 
-// 30 minute lines (>1.8x)
-
-                if (scale >= 0.8f) { // Logic for drawing lines should stay consistent, label logic changes
+                if (scale >= 0.8f) {
 
                     val midX = x + hourWidthPx / 2
 
@@ -1079,8 +1070,6 @@ fun TimelineGrid(baseHourWidth: androidx.compose.ui.unit.Dp, scale: Float, days:
                 }
 
 
-
-// 15 minute lines (>1.5x)
 
                 if (scale >= 1.5f) {
 
@@ -1217,8 +1206,6 @@ fun TimelineTasks(
 
             if (task.isAllDay || (taskStart < endOfRange && taskEnd > dayStartMillis)) {
 
-// Determine the portion of the task visible in the current 00:00 - 24:00 window
-
                 val effectiveStart = if (task.isAllDay) dayStartMillis else maxOf(dayStartMillis, taskStart)
 
                 val effectiveEnd = if (task.isAllDay) endOfRange else minOf(endOfRange, taskEnd)
@@ -1256,16 +1243,18 @@ fun TimelineTasks(
                     Text(
                         text = task.title,
                         modifier = Modifier.padding(4.dp),
-                        style = if (task.isAllDay) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
+                        style = (if (task.isAllDay) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall).copy(fontSize = 18.sp, fontFamily = FontFamily.SansSerif),
+                        color = Color.White,
                         maxLines = if (task.isAllDay) 1 else 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // Travel time blocks
+
                 if (!task.isAllDay) {
+
                     val travelColor = Color(task.color ?: MaterialTheme.colorScheme.primary.toArgb()).copy(alpha = 0.35f)
-                    
+
                     if (task.travelTimeBeforeMs > 0) {
                         val beforeWidth = baseHourWidth * (task.travelTimeBeforeMs.toFloat() / 3600000f)
                         val beforeLeft = left - beforeWidth
@@ -1283,9 +1272,9 @@ fun TimelineTasks(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
-                                    text = travelText, 
-                                    style = MaterialTheme.typography.labelSmall, 
-                                    color = Color.White, 
+                                    text = travelText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
                                     maxLines = 1,
                                     fontSize = 8.sp
                                 )
@@ -1309,9 +1298,9 @@ fun TimelineTasks(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
-                                    text = travelText, 
-                                    style = MaterialTheme.typography.labelSmall, 
-                                    color = Color.White, 
+                                    text = travelText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
                                     maxLines = 1,
                                     fontSize = 8.sp
                                 )

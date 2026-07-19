@@ -12,22 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Event
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.ListAlt
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.LinearScale
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.TimerOff
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,8 +31,6 @@ fun SettingsScreen(
     onThemeChange: (Boolean) -> Unit,
     timelineScale: Float,
     onTimelineScaleChange: (Float) -> Unit,
-    timelineStackTasks: Boolean,
-    onTimelineStackTasksChange: (Boolean) -> Unit,
     lockVerticalScroll: Boolean,
     onLockVerticalScrollChange: (Boolean) -> Unit,
     timelineMinX: Float,
@@ -92,13 +75,14 @@ fun SettingsScreen(
     onSubScreenChange: (String?) -> Unit,
     onBack: () -> Unit
 ) {
-    val backgroundColor = Color(0xFF121212)
+    val backgroundColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFEEEEEE)
 
     when (activeSubScreen) {
         "calendar" -> {
             CalendarSettingsScreen(
                 currentPreference = calendarPreference,
                 onPreferenceChange = onCalendarPreferenceChange,
+                isDarkTheme = isDarkTheme,
                 onBack = { onSubScreenChange(null) }
             )
             return
@@ -141,6 +125,7 @@ fun SettingsScreen(
                 onHideMultiDayChange = onHideMultiDayChange,
                 hideRecurrence = hideRecurrence,
                 onHideRecurrenceChange = onHideRecurrenceChange,
+                isDarkTheme = isDarkTheme,
                 onBack = { onSubScreenChange(null) }
             )
             return
@@ -149,36 +134,33 @@ fun SettingsScreen(
             EasyModeSettingsScreen(
                 chatLayout = easyModeChatLayout,
                 onChatLayoutChange = onEasyModeChatLayoutChange,
+                isDarkTheme = isDarkTheme,
                 onBack = { onSubScreenChange(null) }
             )
             return
         }
-        "timeline_view" -> {
-            TimelineViewSettingsScreen(
+        "timeline_combined" -> {
+            TimelineSettingsScreen(
                 scale = timelineScale,
                 onScaleChange = onTimelineScaleChange,
-                stack = timelineStackTasks,
-                onStackChange = onTimelineStackTasksChange,
                 disableToggle = disableTimelineListToggle,
                 onDisableToggleChange = onDisableTimelineListToggleChange,
-                onBack = { onSubScreenChange(null) }
-            )
-            return
-        }
-        "timeline_limits" -> {
-            TimelineLimitsSettingsScreen(
                 lock = lockVerticalScroll,
                 onLockChange = onLockVerticalScrollChange,
                 minX = timelineMinX,
                 onMinXChange = onTimelineMinXChange,
                 maxX = timelineMaxX,
                 onMaxXChange = onTimelineMaxXChange,
+                isDarkTheme = isDarkTheme,
                 onBack = { onSubScreenChange(null) }
             )
             return
         }
         "language" -> {
-            LanguageSettingsScreen(onBack = { onSubScreenChange(null) })
+            LanguageSettingsScreen(
+                isDarkTheme = isDarkTheme,
+                onBack = { onSubScreenChange(null) }
+            )
             return
         }
     }
@@ -203,7 +185,7 @@ fun SettingsScreen(
         ) {
             item {
                 SettingsSectionTitle("ОФОРМЛЕНИЕ")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsItem(
                         title = "Цвет темы",
                         icon = Icons.Default.Palette,
@@ -214,25 +196,20 @@ fun SettingsScreen(
             
             item {
                 SettingsSectionTitle("ТАЙМЛАЙН")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsItem(
-                        title = "Вид ленты",
-                        icon = Icons.Default.LinearScale,
-                        onClick = { onSubScreenChange("timeline_view") }
-                    )
-                    SettingsItem(
-                        title = "Границы и блокировка",
-                        icon = Icons.Default.Lock,
-                        onClick = { onSubScreenChange("timeline_limits") }
+                        title = "Лента",
+                        icon = Icons.Default.Tune,
+                        onClick = { onSubScreenChange("timeline_combined") }
                     )
                 }
             }
 
             item {
                 SettingsSectionTitle("Easy mode")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsItem(
-                        title = "Настройки заметок",
+                        title = "Заметки",
                         icon = Icons.Default.Description,
                         onClick = { onSubScreenChange("easy_mode_settings") }
                     )
@@ -241,21 +218,21 @@ fun SettingsScreen(
 
             item {
                 SettingsSectionTitle("ПРИЛОЖЕНИЕ")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsItem(
-                        title = "Настройки календаря",
+                        title = "Календари",
                         icon = Icons.Default.CalendarMonth,
                         onClick = { onSubScreenChange("calendar") },
                         showDivider = true
                     )
                     SettingsItem(
-                        title = "Настройки событий",
+                        title = "Добавление задачи",
                         icon = Icons.Default.Event,
                         onClick = { onSubScreenChange("event_settings") },
                         showDivider = true
                     )
                     SettingsItem(
-                        title = "Язык",
+                        title = "...",
                         icon = Icons.Default.Language,
                         onClick = { onSubScreenChange("language") }
                     )
@@ -268,13 +245,13 @@ fun SettingsScreen(
 }
 
 @Composable
-fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
+fun SettingsGroup(isDarkTheme: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = Modifier
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = if (isDarkTheme) MaterialTheme.colorScheme.surface else Color.White,
         tonalElevation = 1.dp
     ) {
         Column {
@@ -328,19 +305,25 @@ fun SettingsItem(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TimelineViewSettingsScreen(
+fun TimelineSettingsScreen(
     scale: Float,
     onScaleChange: (Float) -> Unit,
-    stack: Boolean,
-    onStackChange: (Boolean) -> Unit,
     disableToggle: Boolean,
     onDisableToggleChange: (Boolean) -> Unit,
+    lock: Boolean,
+    onLockChange: (Boolean) -> Unit,
+    minX: Float,
+    onMinXChange: (Float) -> Unit,
+    maxX: Float,
+    onMaxXChange: (Float) -> Unit,
+    isDarkTheme: Boolean,
     onBack: () -> Unit
 ) {
+    val backgroundColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFEEEEEE)
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Вид ленты") },
+                title = { Text("Настройки ленты") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -348,14 +331,14 @@ fun TimelineViewSettingsScreen(
                 }
             )
         },
-        containerColor = Color(0xFF121212)
+        containerColor = backgroundColor
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
             item {
-                SettingsSectionTitle("ВЫСОТА")
-                SettingsGroup {
+                SettingsSectionTitle("Высота ленты")
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsSliderItem(
-                        title = "Высота дорожки",
+                        title = "Высота Дорожек",
                         icon = Icons.Default.Tune,
                         value = scale,
                         onValueChange = onScaleChange,
@@ -363,79 +346,44 @@ fun TimelineViewSettingsScreen(
                     )
                 }
             }
+
             item {
                 SettingsSectionTitle("ОТОБРАЖЕНИЕ")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsToggleItem(
-                        title = "Совмещенные ленты",
-                        icon = Icons.Default.Palette,
-                        checked = stack,
-                        onCheckedChange = onStackChange
-                    )
-                    SettingsToggleItem(
-                        title = "Отключить переход в список",
+                        title = "Отключить кнопку Timeline",
                         icon = Icons.Default.ListAlt,
                         checked = disableToggle,
                         onCheckedChange = onDisableToggleChange
                     )
                 }
             }
-        }
-    }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TimelineLimitsSettingsScreen(
-    lock: Boolean,
-    onLockChange: (Boolean) -> Unit,
-    minX: Float,
-    onMinXChange: (Float) -> Unit,
-    maxX: Float,
-    onMaxXChange: (Float) -> Unit,
-    onBack: () -> Unit
-) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Границы и блокировка") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        },
-        containerColor = Color(0xFF121212)
-    ) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
             item {
-                SettingsSectionTitle("БЛОКИРОВКА")
-                SettingsGroup {
+                SettingsSectionTitle("БЛОКИРОВКА И ГРАНИЦЫ")
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsToggleItem(
-                        title = "Lock Vertical Scroll",
+                        title = "Только горизонтальный скролл",
                         icon = Icons.Default.Lock,
                         checked = lock,
                         onCheckedChange = onLockChange
                     )
-                }
-            }
-            item {
-                SettingsSectionTitle("РУЧНЫЕ ГРАНИЦЫ")
-                SettingsGroup {
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Горизонтальные границы", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
                                 value = maxX.toString(),
                                 onValueChange = { onMaxXChange(it.toFloatOrNull() ?: 0f) },
-                                label = { Text("Max X (Left)") },
+                                label = { Text("Левая") },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
                             OutlinedTextField(
                                 value = minX.toString(),
                                 onValueChange = { onMinXChange(it.toFloatOrNull() ?: 0f) },
-                                label = { Text("Min X (Right)") },
+                                label = { Text("Правая") },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -464,12 +412,14 @@ fun EventSettingsScreen(
     onHideMultiDayChange: (Boolean) -> Unit,
     hideRecurrence: Boolean,
     onHideRecurrenceChange: (Boolean) -> Unit,
+    isDarkTheme: Boolean,
     onBack: () -> Unit
 ) {
+    val backgroundColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFEEEEEE)
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Настройки событий") },
+                title = { Text("Добавление задачи") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -477,12 +427,12 @@ fun EventSettingsScreen(
                 }
             )
         },
-        containerColor = Color(0xFF121212)
+        containerColor = backgroundColor
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
             item {
                 SettingsSectionTitle("ДОБАВЛЕНИЕ И РЕДАКТИРОВАНИЕ")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsToggleItem(
                         title = "Убрать Location",
                         icon = Icons.Default.LocationOn,
@@ -529,7 +479,7 @@ fun EventSettingsScreen(
 
             item {
                 SettingsSectionTitle("УДАЛЕНИЕ")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsToggleItem(
                         title = "Предупреждать перед удалением",
                         icon = Icons.Default.Warning,
@@ -547,12 +497,14 @@ fun EventSettingsScreen(
 fun EasyModeSettingsScreen(
     chatLayout: Boolean,
     onChatLayoutChange: (Boolean) -> Unit,
+    isDarkTheme: Boolean,
     onBack: () -> Unit
 ) {
+    val backgroundColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFEEEEEE)
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Настройки заметок") },
+                title = { Text("Настройки Easy mode") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -560,12 +512,12 @@ fun EasyModeSettingsScreen(
                 }
             )
         },
-        containerColor = Color(0xFF121212)
+        containerColor = backgroundColor
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
             item {
                 SettingsSectionTitle("ДОБАВЛЕНИЕ ЗАМЕТОК")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsToggleItem(
                         title = "Режим Чата",
                         icon = Icons.Default.Tune,
@@ -580,7 +532,8 @@ fun EasyModeSettingsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LanguageSettingsScreen(onBack: () -> Unit) {
+fun LanguageSettingsScreen(isDarkTheme: Boolean, onBack: () -> Unit) {
+    val backgroundColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFEEEEEE)
     Scaffold(
         topBar = {
             TopAppBar(
@@ -592,7 +545,7 @@ fun LanguageSettingsScreen(onBack: () -> Unit) {
                 }
             )
         },
-        containerColor = Color(0xFF121212)
+        containerColor = backgroundColor
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
             Text("Скоро...", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
@@ -621,6 +574,7 @@ fun AppearanceSettingsScreen(
     onTodayColorChange: (Int) -> Unit,
     onBack: () -> Unit
 ) {
+    val backgroundColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFEEEEEE)
     var showColorPickerFor by remember { mutableStateOf<String?>(null) }
 
     if (showColorPickerFor != null) {
@@ -656,7 +610,7 @@ fun AppearanceSettingsScreen(
                 }
             )
         },
-        containerColor = Color(0xFF121212)
+        containerColor = backgroundColor
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -665,7 +619,7 @@ fun AppearanceSettingsScreen(
         ) {
             item {
                 SettingsSectionTitle("ТЕМА")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsToggleItem(
                         title = "Темная тема",
                         icon = Icons.Default.DarkMode,
@@ -677,7 +631,7 @@ fun AppearanceSettingsScreen(
 
             item {
                 SettingsSectionTitle("БАР ДНЕЙ (КАЛЕНДАРЬ)")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsClickItemPlain(
                         title = "Цвет бара",
                         icon = Icons.Default.Palette,
@@ -694,7 +648,7 @@ fun AppearanceSettingsScreen(
 
             item {
                 SettingsSectionTitle("СЕТКА (КАЛЕНДАРЬ)")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsClickItemPlain(
                         title = "Цвет линий сетки",
                         icon = Icons.Default.Palette,
@@ -711,7 +665,7 @@ fun AppearanceSettingsScreen(
 
             item {
                 SettingsSectionTitle("СПИСОК ЗАДАЧ(calendar)")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsClickItemPlain(
                         title = "Цвет фона",
                         icon = Icons.Default.Palette,
@@ -728,7 +682,7 @@ fun AppearanceSettingsScreen(
 
             item {
                 SettingsSectionTitle("МАРКЕРЫ (calendar)")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsClickItemPlain(
                         title = "Цвет текущего дня",
                         icon = Icons.Default.Palette,
@@ -834,8 +788,10 @@ fun SimpleColorPickerDialog(
 fun CalendarSettingsScreen(
     currentPreference: Int,
     onPreferenceChange: (Int) -> Unit,
+    isDarkTheme: Boolean,
     onBack: () -> Unit
 ) {
+    val backgroundColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFEEEEEE)
     var showDialog by remember { mutableStateOf(false) }
 
     if (showDialog) {
@@ -881,7 +837,7 @@ fun CalendarSettingsScreen(
                 }
             )
         },
-        containerColor = Color(0xFF121212)
+        containerColor = backgroundColor
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -890,9 +846,9 @@ fun CalendarSettingsScreen(
         ) {
             item {
                 SettingsSectionTitle("Предпочитаемый вид")
-                SettingsGroup {
+                SettingsGroup(isDarkTheme = isDarkTheme) {
                     SettingsClickItemPlain(
-                        title = "Настройка переключения календарей",
+                        title = "Переключение календарей",
                         icon = Icons.Default.CalendarMonth,
                         onClick = { showDialog = true }
                     )

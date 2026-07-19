@@ -7,6 +7,9 @@ import androidx.core.view.WindowCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.*
 import androidx.compose.runtime.getValue
@@ -41,7 +44,6 @@ class MainActivity : ComponentActivity() {
                 val viewModel: MainViewModel = viewModel()
                 val tasks by viewModel.allTasks.collectAsState()
                 val timelineScale by viewModel.timelineScale.collectAsState()
-                val timelineStackTasks by viewModel.timelineStackTasks.collectAsState()
                 val lockVerticalScroll by viewModel.lockVerticalScroll.collectAsState()
                 val timelineMinX by viewModel.timelineMinX.collectAsState()
                 val timelineMaxX by viewModel.timelineMaxX.collectAsState()
@@ -77,6 +79,7 @@ class MainActivity : ComponentActivity() {
                 var showTaskDetail by remember { mutableStateOf(false) }
                 var taskToEdit by remember { mutableStateOf<Task?>(null) }
                 var initialDateForTask by remember { mutableStateOf<LocalDate?>(null) }
+                var initialStartTimeForTask by remember { mutableStateOf<Long?>(null) }
                 
                 // Move selectedDate to activity level to survive screen swaps
                 var calendarSelectedDate by remember { mutableStateOf<LocalDate?>(null) }
@@ -95,8 +98,6 @@ class MainActivity : ComponentActivity() {
                             onThemeChange = { isDarkTheme = it },
                             timelineScale = timelineScale,
                             onTimelineScaleChange = { viewModel.setTimelineScale(it) },
-                            timelineStackTasks = timelineStackTasks,
-                            onTimelineStackTasksChange = { viewModel.setTimelineStackTasks(it) },
                             lockVerticalScroll = lockVerticalScroll,
                             onLockVerticalScrollChange = { viewModel.setLockVerticalScroll(it) },
                             timelineMinX = timelineMinX,
@@ -153,11 +154,13 @@ class MainActivity : ComponentActivity() {
                         showTaskDetail = false
                         taskToEdit = null
                         initialDateForTask = null
+                        initialStartTimeForTask = null
                     }
                     Box {
                         TaskDetailScreen(
                             task = taskToEdit,
                             initialDate = initialDateForTask,
+                            initialStartTime = initialStartTimeForTask,
                             warnBeforeDelete = warnBeforeDelete,
                             disableTravelTime = disableTravelTime,
                             hideLocation = hideLocation,
@@ -169,6 +172,7 @@ class MainActivity : ComponentActivity() {
                                 showTaskDetail = false
                                 taskToEdit = null
                                 initialDateForTask = null
+                                initialStartTimeForTask = null
                             },
                             onSave = { task ->
                                 if (task.id != 0L) {
@@ -179,27 +183,34 @@ class MainActivity : ComponentActivity() {
                                 showTaskDetail = false
                                 taskToEdit = null
                                 initialDateForTask = null
+                                initialStartTimeForTask = null
                             },
                             onDelete = { task ->
                                 viewModel.deleteTask(task)
                                 showTaskDetail = false
                                 taskToEdit = null
                                 initialDateForTask = null
+                                initialStartTimeForTask = null
                             },
                             onDeleteRecurrence = { task, deleteAllFollowing ->
                                 viewModel.deleteTasksInRecurrence(task, deleteAllFollowing)
                                 showTaskDetail = false
                                 taskToEdit = null
                                 initialDateForTask = null
+                                initialStartTimeForTask = null
                             }
                         )
                     }
                 } else {
                     Scaffold(
                         bottomBar = {
-                            NavigationBar {
+                            NavigationBar(
+                                modifier = Modifier.height(64.dp),
+                                windowInsets = WindowInsets(0, 0, 0, 0)
+                            ) {
                                 NavigationBarItem(
                                     selected = selectedTab == 0,
+                                    modifier = Modifier.padding(top = 12.dp),
                                     onClick = { 
                                         if (selectedTab == 0) {
                                             if (!disableTimelineListToggle) {
@@ -214,6 +225,7 @@ class MainActivity : ComponentActivity() {
                                 )
                                 NavigationBarItem(
                                     selected = selectedTab == 1,
+                                    modifier = Modifier.padding(top = 12.dp),
                                     onClick = { 
                                         if (selectedTab == 1) {
                                             if (calendarPreference == 0) {
@@ -233,6 +245,7 @@ class MainActivity : ComponentActivity() {
                                 )
                                 NavigationBarItem(
                                     selected = selectedTab == 2,
+                                    modifier = Modifier.padding(top = 12.dp),
                                     onClick = { selectedTab = 2 },
                                     icon = { Text("💬") },
                                     label = { Text("Easy") }
@@ -253,14 +266,14 @@ class MainActivity : ComponentActivity() {
                                         taskToEdit = it
                                         showTaskDetail = true
                                     },
-                                    onAddTaskClick = {
+                                    onAddTaskClick = { startTime ->
                                         taskToEdit = null
+                                        initialStartTimeForTask = startTime
                                         showTaskDetail = true
                                     },
                                     viewMode = timelineViewMode,
                                     onViewModeChange = { timelineViewMode = it },
                                     laneScale = timelineScale,
-                                    stickTimelines = timelineStackTasks,
                                     lockVerticalScroll = lockVerticalScroll,
                                     customMinX = timelineMinX,
                                     customMaxX = timelineMaxX,

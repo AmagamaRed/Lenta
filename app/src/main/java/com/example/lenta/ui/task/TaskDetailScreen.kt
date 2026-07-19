@@ -30,12 +30,15 @@ import java.time.LocalDate
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.Date
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskDetailScreen(
     task: Task? = null,
     initialDate: LocalDate? = null,
+    initialStartTime: Long? = null,
     onDismiss: () -> Unit,
     onSave: (Task) -> Unit,
     onDelete: ((Task) -> Unit)? = null,
@@ -65,6 +68,8 @@ fun TaskDetailScreen(
     val baseCal = Calendar.getInstance().apply {
         if (task != null) {
             timeInMillis = task.startTime ?: System.currentTimeMillis()
+        } else if (initialStartTime != null) {
+            timeInMillis = initialStartTime
         } else if (initialDate != null) {
             set(Calendar.YEAR, initialDate.year)
             set(Calendar.MONTH, initialDate.monthValue - 1)
@@ -92,7 +97,7 @@ fun TaskDetailScreen(
         Color(0xFF5C6BC0), // Solid Blue
         Color(0xFF4CAF50), // Muted Green
         Color(0xFFFFD600), // Saturated Yellow
-        Color(0xFFF57C00), // Darkish Pastel Orange
+        Color(0xFFCF854E), // Dark Pastel Orange (Muted)
         Color(0xFF00BCD4), // Cyan
         Color(0xFF9C27B0), // Purple
         Color(0xFFE91E63), // Pink
@@ -840,22 +845,38 @@ fun TravelTimeInput(
         Text(label, modifier = Modifier.width(60.dp), style = MaterialTheme.typography.bodyMedium)
         TextField(
             value = if (hours == 0L) "" else hours.toString(),
-            onValueChange = { onHoursChange(it.toLongOrNull() ?: 0L) },
-            modifier = Modifier.width(60.dp),
-            placeholder = { Text("0") },
+            onValueChange = { 
+                if (it.length <= 2) {
+                    onHoursChange(it.toLongOrNull() ?: 0L)
+                }
+            },
+            modifier = Modifier.width(70.dp),
+            placeholder = { Text("0", color = Color.Gray.copy(alpha = 0.5f)) },
             suffix = { Text("ч.") },
             singleLine = true,
-            colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent)
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent, 
+                unfocusedContainerColor = Color.Transparent
+            )
         )
         Spacer(modifier = Modifier.width(8.dp))
         TextField(
             value = if (minutes == 0L) "" else minutes.toString(),
-            onValueChange = { onMinutesChange(it.toLongOrNull() ?: 0L) },
-            modifier = Modifier.width(70.dp),
-            placeholder = { Text("0") },
+            onValueChange = { 
+                if (it.length <= 2) {
+                    onMinutesChange(it.toLongOrNull() ?: 0L)
+                }
+            },
+            modifier = Modifier.width(100.dp),
+            placeholder = { Text("0", color = Color.Gray.copy(alpha = 0.5f)) },
             suffix = { Text("мин.") },
             singleLine = true,
-            colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent)
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent, 
+                unfocusedContainerColor = Color.Transparent
+            )
         )
     }
 }

@@ -25,6 +25,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -242,6 +243,7 @@ fun CalendarScreen(
                             text = dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault()),
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
+                            fontFamily = FontFamily.SansSerif,
                             color = if (isSunday) Color.Red else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -424,6 +426,7 @@ fun TaskInCell(task: Task) {
             Text(
                 text = timeStr,
                 fontSize = 6.5.sp,
+                fontFamily = FontFamily.SansSerif,
                 color = Color.White,
                 maxLines = 1,
                 modifier = Modifier.wrapContentWidth()
@@ -432,7 +435,8 @@ fun TaskInCell(task: Task) {
         }
         Text(
             text = task.title,
-            fontSize = 7.sp,
+            fontSize = 12.sp,
+            fontFamily = FontFamily.SansSerif,
             color = Color.White,
             maxLines = 1,
             overflow = TextOverflow.Clip,
@@ -516,6 +520,7 @@ fun VerticalDayCell(
             Text(
                 text = date.dayOfMonth.toString(),
                 fontSize = 11.sp,
+                fontFamily = FontFamily.SansSerif,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                 color = if (isSelected || isToday) todayColor else Color.Unspecified,
                 modifier = Modifier.padding(vertical = 2.dp)

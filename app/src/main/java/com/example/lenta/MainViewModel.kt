@@ -27,14 +27,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putFloat("timeline_scale", scale).apply()
     }
 
-    private val _timelineStackTasks = MutableStateFlow(prefs.getBoolean("timeline_stack", false))
-    val timelineStackTasks = _timelineStackTasks.asStateFlow()
-
-    fun setTimelineStackTasks(stack: Boolean) {
-        _timelineStackTasks.value = stack
-        prefs.edit().putBoolean("timeline_stack", stack).apply()
-    }
-
     private val _lockVerticalScroll = MutableStateFlow(prefs.getBoolean("lock_scroll", false))
     val lockVerticalScroll = _lockVerticalScroll.asStateFlow()
 
