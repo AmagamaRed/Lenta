@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity() {
             LentaTheme(darkTheme = isDarkTheme) {
                 val viewModel: MainViewModel = viewModel()
                 val tasks by viewModel.allTasks.collectAsState()
+                val deletedTasks by viewModel.deletedTasks.collectAsState()
                 val timelineScale by viewModel.timelineScale.collectAsState()
                 val lockVerticalScroll by viewModel.lockVerticalScroll.collectAsState()
                 val timelineMinX by viewModel.timelineMinX.collectAsState()
@@ -138,6 +139,9 @@ class MainActivity : ComponentActivity() {
                             onHideRecurrenceChange = { viewModel.setHideRecurrence(it) },
                             disableTimelineListToggle = disableTimelineListToggle,
                             onDisableTimelineListToggleChange = { viewModel.setDisableTimelineListToggle(it) },
+                            trashTasks = deletedTasks,
+                            onRestoreTask = { viewModel.restoreTask(it) },
+                            onPermanentlyDeleteTask = { viewModel.permanentlyDeleteTask(it) },
                             activeSubScreen = activeSettingsSubScreen,
                             onSubScreenChange = { activeSettingsSubScreen = it },
                             onBack = {

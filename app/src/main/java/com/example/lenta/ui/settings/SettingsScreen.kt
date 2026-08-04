@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -21,8 +22,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.lenta.model.Task
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +77,9 @@ fun SettingsScreen(
     onEasyModeChatLayoutChange: (Boolean) -> Unit,
     disableTimelineListToggle: Boolean,
     onDisableTimelineListToggleChange: (Boolean) -> Unit,
+    trashTasks: List<Task>,
+    onRestoreTask: (Task) -> Unit,
+    onPermanentlyDeleteTask: (Task) -> Unit,
     activeSubScreen: String?,
     onSubScreenChange: (String?) -> Unit,
     onBack: () -> Unit
@@ -157,7 +166,10 @@ fun SettingsScreen(
             return
         }
         "language" -> {
-            LanguageSettingsScreen(
+            TrashScreen(
+                tasks = trashTasks,
+                onRestore = onRestoreTask,
+                onPermanentlyDelete = onPermanentlyDeleteTask,
                 isDarkTheme = isDarkTheme,
                 onBack = { onSubScreenChange(null) }
             )
@@ -232,8 +244,8 @@ fun SettingsScreen(
                         showDivider = true
                     )
                     SettingsItem(
-                        title = "...",
-                        icon = Icons.Default.Language,
+                        title = "Корзина",
+                        icon = Icons.Default.Delete,
                         onClick = { onSubScreenChange("language") }
                     )
                 }
@@ -532,12 +544,20 @@ fun EasyModeSettingsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LanguageSettingsScreen(isDarkTheme: Boolean, onBack: () -> Unit) {
+fun TrashScreen(
+    tasks: List<Task>,
+    onRestore: (Task) -> Unit,
+    onPermanentlyDelete: (Task) -> Unit,
+    isDarkTheme: Boolean,
+    onBack: () -> Unit
+) {
     val backgroundColor = if (isDarkTheme) Color(0xFF121212) else Color(0xFFEEEEEE)
+    val timeFormat = remember { SimpleDateFormat("HH:mm, dd MMM", Locale.getDefault()) }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Язык") },
+                title = { Text("Корзина") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -547,8 +567,106 @@ fun LanguageSettingsScreen(isDarkTheme: Boolean, onBack: () -> Unit) {
         },
         containerColor = backgroundColor
     ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-            Text("Скоро...", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
+        if (tasks.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Корзина пуста",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.Gray
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Text(
+                        text = "Задачи удаляются автоматически через 24 часа",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+                items(tasks) { taskItem ->
+                    TrashTaskItem(
+                        task = taskItem,
+                        timeFormat = timeFormat,
+                        onRestore = { onRestore(taskItem) },
+                        onDelete = { onPermanentlyDelete(taskItem) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TrashTaskItem(
+    task: Task,
+    timeFormat: SimpleDateFormat,
+    onRestore: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(Color(task.color ?: 0), RoundedCornerShape(2.dp))
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                IconButton(onClick = onRestore, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Default.Restore,
+                        contentDescription = "Restore",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Default.DeleteForever,
+                        contentDescription = "Delete Permanently",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            
+            if (task.deletedAt != null) {
+                Text(
+                    text = "Удалено: ${timeFormat.format(Date(task.deletedAt))}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(start = 24.dp, top = 4.dp)
+                )
+            }
         }
     }
 }

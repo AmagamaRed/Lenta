@@ -4,7 +4,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -174,6 +176,14 @@ fun CalendarScreen(
     val finalTodayColor = Color(todayColor)
     val primaryColor = MaterialTheme.colorScheme.primary
 
+    val isDragged by gridState.interactionSource.collectIsDraggedAsState()
+    // Track manual dragging to hide task list
+    LaunchedEffect(isDragged) {
+        if (isDragged && selectedDate != null) {
+            onDateSelected(null)
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -328,7 +338,27 @@ fun CalendarScreen(
                                             gridColor = finalGridColor,
                                             todayColor = finalTodayColor,
                                             monthIndicator = null, // Logic moved to parent drawBehind
-                                            onClick = { onDateSelected(it) }
+                                            onClick = { clickedDate ->
+                                                onDateSelected(clickedDate)
+                                                if (viewMode == CalendarViewMode.VERTICAL_LIST) {
+                                                    coroutineScope.launch {
+                                                        val info = gridState.layoutInfo
+                                                        val item = info.visibleItemsInfo.find { it.index == index }
+                                                        if (item != null) {
+                                                            // We know the task list takes 45% of height (from fillMaxHeight(0.45f) below)
+                                                            // Calculate the threshold (top of the task list)
+                                                            val threshold = info.viewportEndOffset * 0.55f
+                                                            val itemBottom = item.offset.y + item.size.height
+                                                            
+                                                            // If the cell is partially or fully covered by the 45% task list
+                                                            if (itemBottom > threshold) {
+                                                                val scrollAmount = itemBottom - threshold
+                                                                gridState.animateScrollBy(scrollAmount)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         )
                                     }
                                 }
@@ -429,17 +459,19 @@ fun TaskInCell(task: Task) {
                 fontFamily = FontFamily.SansSerif,
                 color = Color.White,
                 maxLines = 1,
+                softWrap = false,
                 modifier = Modifier.wrapContentWidth()
             )
             Spacer(modifier = Modifier.width(3.dp))
         }
         Text(
             text = task.title,
-            fontSize = 12.sp,
+            fontSize = 9.sp,
             fontFamily = FontFamily.SansSerif,
             color = Color.White,
             maxLines = 1,
             overflow = TextOverflow.Clip,
+            softWrap = false,
             modifier = Modifier.weight(1f)
         )
     }

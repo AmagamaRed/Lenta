@@ -211,6 +211,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
+    val deletedTasks: StateFlow<List<Task>> = taskDao.getDeletedTasks()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    init {
+        // Cleanup trash: delete tasks older than 24 hours
+        viewModelScope.launch {
+            val oneDayAgo = System.currentTimeMillis() - (24 * 60 * 60 * 1000L)
+            taskDao.deleteOldDeletedTasks(oneDayAgo)
+        }
+    }
+
     fun addTask(task: Task) {
         viewModelScope.launch {
             taskDao.insert(task)
@@ -252,11 +267,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteCompletedEasyModeTasks() {
         viewModelScope.launch {
             val tasksToDelete = allTasks.value.filter { it.isEasyModeEntry && it.isCompleted }
-            tasksToDelete.forEach { taskDao.delete(it) }
+            tasksToDelete.forEach { updateTask(it.copy(deletedAt = System.currentTimeMillis())) }
         }
     }
 
     fun deleteTask(task: Task) {
+        viewModelScope.launch {
+            updateTask(task.copy(deletedAt = System.currentTimeMillis()))
+        }
+    }
+
+    fun restoreTask(task: Task) {
+        viewModelScope.launch {
+            updateTask(task.copy(deletedAt = null))
+        }
+    }
+
+    fun permanentlyDeleteTask(task: Task) {
         viewModelScope.launch {
             taskDao.delete(task)
         }
@@ -265,15 +292,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteTasksInRecurrence(task: Task, deleteAllFollowing: Boolean) {
         viewModelScope.launch {
             if (task.recurrenceId == null) {
-                taskDao.delete(task)
+                updateTask(task.copy(deletedAt = System.currentTimeMillis()))
             } else {
                 if (deleteAllFollowing) {
                     val tasksToDelete = allTasks.value.filter { 
                         it.recurrenceId == task.recurrenceId && (it.startTime ?: 0L) >= (task.startTime ?: 0L)
                     }
-                    tasksToDelete.forEach { taskDao.delete(it) }
+                    tasksToDelete.forEach { updateTask(it.copy(deletedAt = System.currentTimeMillis())) }
                 } else {
-                    taskDao.delete(task)
+                    updateTask(task.copy(deletedAt = System.currentTimeMillis()))
                 }
             }
         }

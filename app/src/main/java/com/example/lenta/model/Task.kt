@@ -26,5 +26,6 @@ data class Task(
     val recurrenceId: String? = null,
     val travelTimeBeforeMs: Long = 0,
     val travelTimeAfterMs: Long = 0,
-    val isVisibleOnlyOnTimeline: Boolean = false
+    val isVisibleOnlyOnTimeline: Boolean = false,
+    val deletedAt: Long? = null
 )

@@ -20,12 +20,18 @@ interface TaskDao {
     @Delete
     suspend fun delete(task: Task)
 
-    @Query("SELECT * from tasks ORDER BY startTime ASC")
+    @Query("SELECT * from tasks WHERE deletedAt IS NULL ORDER BY startTime ASC")
     fun getAllTasks(): Flow<List<Task>>
 
-    @Query("SELECT * from tasks WHERE id = :id")
+    @Query("SELECT * from tasks WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
+    fun getDeletedTasks(): Flow<List<Task>>
+
+    @Query("SELECT * from tasks WHERE id = :id AND deletedAt IS NULL")
     fun getTask(id: Long): Flow<Task>
     
-    @Query("SELECT * FROM tasks WHERE startTime >= :startOfDay AND startTime <= :endOfDay")
+    @Query("SELECT * FROM tasks WHERE startTime >= :startOfDay AND startTime <= :endOfDay AND deletedAt IS NULL")
     fun getTasksForDay(startOfDay: Long, endOfDay: Long): Flow<List<Task>>
+
+    @Query("DELETE FROM tasks WHERE deletedAt IS NOT NULL AND deletedAt < :threshold")
+    suspend fun deleteOldDeletedTasks(threshold: Long)
 }
