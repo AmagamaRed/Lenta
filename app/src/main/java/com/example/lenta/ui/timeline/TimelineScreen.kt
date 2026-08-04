@@ -104,7 +104,7 @@ fun TimelineScreen(
     
     // ЭТОТ ПАРАМЕТР (X) КОНТРОЛИРУЕТ СДВИГ ВРЕМЕНИ И ЭКРАНА
     // Установите здесь нужное значение (например, 640 для 10ч 40мин)
-    val manualTimeShiftMinutes = 0
+    val manualTimeShiftMinutes = 300
 
     val timelineStart = remember(timelineDays, lockVerticalScroll) {
         val cal = Calendar.getInstance().apply {
@@ -504,7 +504,7 @@ fun TimelineScreen(
                                 }
 
                                 if (isToday) {
-                                    CurrentTimeLine(baseHourWidth, config.height, tick, manualTimeShiftMinutes)
+                                    CurrentTimeLine(baseHourWidth, config.height, tick)
                                 }
                             }
                         }
@@ -763,13 +763,13 @@ fun TimelineTasks(
 }
 
 @Composable
-fun CurrentTimeLine(baseHourWidth: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp, tick: Int, shiftMinutes: Int = 0) {
+fun CurrentTimeLine(baseHourWidth: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp, tick: Int) {
     val now = remember(tick) { Calendar.getInstance() }
     val hour = now.get(Calendar.HOUR_OF_DAY)
     val minute = now.get(Calendar.MINUTE)
     
-    // УЧИТЫВАЕМ СДВИГ ДЛЯ КРАСНОЙ ЛИНИИ
-    val timeOffset = baseHourWidth * (hour + (minute + shiftMinutes) / 60f)
+    // Метка ВСЕГДА показывает реальное текущее время
+    val timeOffset = baseHourWidth * (hour + minute / 60f)
     Box(modifier = Modifier.fillMaxHeight().width(2.dp).offset(x = timeOffset).background(Color.Red)) {
         Box(modifier = Modifier.size(8.dp).align(Alignment.TopCenter).offset(y = (-4).dp).background(Color.Red, shape = CircleShape))
     }
